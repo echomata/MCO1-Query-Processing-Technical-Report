@@ -147,3 +147,10 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Local project datasets and Python runtime files
+data/raw/
+data/processed/
+*.parquet
+__pycache__/
+.venv/
