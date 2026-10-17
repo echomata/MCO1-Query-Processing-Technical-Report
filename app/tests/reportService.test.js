@@ -1,52 +1,49 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMockReport, getReport } from '../src/services/reportService.js';
+import { getReport, validateFilters } from '../src/services/reportService.js';
 import { DEFAULT_FILTERS } from '../src/lib/config.js';
+import { formatReport } from '../server/reports.js';
 
-test('every report reconciles to the same summary total', () => {
-  for (const id of ['overview', 'time', 'locations', 'payments']) {
-    const result = buildMockReport(id);
-    assert.equal(result.series.reduce((sum, row) => sum + row.trips, 0), result.summary.totalTrips);
-    assert.equal(result.series.reduce((sum, row) => sum + Math.round(row.revenue * 100), 0), Math.round(result.summary.totalRevenue * 100));
-  }
+test('live requests encode filters and accept only warehouse results', async () => {
+  const filters = { ...DEFAULT_FILTERS, borough: 'Staten Island', startMonth: 2, endMonth: 3 };
+  const expected = formatReport('overview', filters, [], 12);
+  const result = await getReport('overview', filters, { fetchImpl: async (url) => {
+    const parsed = new URL(url, 'http://localhost');
+    assert.equal(parsed.pathname, '/api/reports/overview');
+    assert.equal(parsed.searchParams.get('borough'), 'Staten Island');
+    assert.equal(parsed.searchParams.get('startMonth'), '2');
+    return Response.json(expected);
+  } });
+  assert.deepEqual(result, expected);
 });
 
-test('quarter and year roll-ups preserve monthly totals', () => {
-  const monthly = buildMockReport();
-  for (const granularity of ['quarter', 'year']) {
-    const rolled = buildMockReport('time', { granularity });
-    assert.equal(rolled.series.length, granularity === 'quarter' ? 4 : 1);
-    assert.deepEqual(rolled.summary, monthly.summary);
-    assert.equal(rolled.series.reduce((sum, row) => sum + row.trips, 0), monthly.summary.totalTrips);
-  }
+test('unavailable API and sample responses never fall back to mock data', async () => {
+  await assert.rejects(getReport('overview', {}, { fetchImpl: async () => { throw new Error('offline'); } }), /Cannot reach the API/);
+  await assert.rejects(getReport('overview', {}, { fetchImpl: async () => Response.json({ meta: { source: 'mock' } }) }), /Live warehouse results/);
+  await assert.rejects(getReport('overview', {}, { fetchImpl: async () => Response.json({ error: { message: 'Database offline' } }, { status: 503 }) }), /Database offline/);
+  await assert.rejects(getReport('overview', {}, { fetchImpl: async () => new Response('<html>') }), /did not return JSON/);
+  await assert.rejects(getReport('overview', {}, { fetchImpl: async () => Response.json({ report: 'overview', meta: { source: 'warehouse', status: 'ready' } }) }), /incomplete/);
 });
 
-test('multiple filters intersect and all measures use that same selection', () => {
-  const result = buildMockReport('payments', { startMonth: 2, endMonth: 3, borough: 'Queens', paymentType: 'cash' });
-  assert.equal(result.series.length, 1);
-  assert.equal(result.series[0].key, 'cash');
-  assert.equal(result.boroughs.length, 1);
-  assert.equal(result.boroughs[0].key, 'Queens');
-  assert.ok(result.summary.totalTrips < buildMockReport().summary.totalTrips);
-  assert.equal(buildMockReport('time', result.filters).series.length, 2);
+test('WIP has no figures and makes no request', async () => {
+  const result = await getReport('optimization', {}, { fetchImpl: () => assert.fail('WIP should not fetch') });
+  assert.equal(result.meta.status, 'wip');
+  assert.equal(result.meta.source, null);
+  assert.equal(result.summary, undefined);
 });
 
-test('weighted fare averages reconcile across time groups', () => {
-  const result = buildMockReport();
-  const weighted = result.series.reduce((sum, row) => sum + row.averageFare * row.trips, 0) / result.summary.totalTrips;
-  assert.ok(Math.abs(weighted - result.summary.averageFare) < 0.000001);
+test('invalid filters are rejected before the request', async () => {
+  assert.throws(() => validateFilters({ startMonth: 8, endMonth: 2 }), /starting month/);
+  assert.throws(() => validateFilters({ borough: "Queens' OR 1=1" }), /borough/);
+  assert.throws(() => validateFilters({ granularity: 'day' }), /time level/);
+  await assert.rejects(getReport('invalid'), /not available/);
 });
 
-test('invalid filter values and reports are rejected', () => {
-  assert.throws(() => buildMockReport('overview', { startMonth: 8, endMonth: 2 }), /starting month/);
-  assert.throws(() => buildMockReport('overview', { borough: 'Invalid' }), /borough/);
-  assert.throws(() => buildMockReport('overview', { granularity: 'day' }), /time level/);
-  assert.throws(() => buildMockReport('invalid'), /not available/);
-});
-
-test('cancelled requests never resolve a stale report', async () => {
+test('cancelled requests preserve AbortError', async () => {
   const controller = new AbortController();
-  const request = getReport('overview', DEFAULT_FILTERS, { signal: controller.signal });
+  const request = getReport('overview', DEFAULT_FILTERS, { signal: controller.signal, fetchImpl: async (url, { signal }) => {
+    return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+  } });
   controller.abort();
   await assert.rejects(request, { name: 'AbortError' });
 });

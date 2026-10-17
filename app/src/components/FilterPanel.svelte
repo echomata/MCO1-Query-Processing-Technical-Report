@@ -14,7 +14,7 @@
     <label>Pickup borough<select bind:value={draft.borough}><option value="all">All boroughs</option>{#each BOROUGHS as borough}<option value={borough}>{borough}</option>{/each}</select></label>
     <label>Payment method<select bind:value={draft.paymentType}><option value="all">All methods</option>{#each PAYMENTS as payment}<option value={payment.id}>{payment.label}</option>{/each}</select></label>
     <label>Time level<select bind:value={draft.granularity}><option value="month">Monthly</option><option value="quarter">Quarterly</option><option value="year">Yearly</option></select></label>
-    <div class="filter-actions"><button class="button button-primary" type="submit" disabled={busy}>Apply filters<Icon name="arrow" size={16} /></button><button class="button-icon reset-button" type="button" aria-label="Reset all filters" title="Reset all filters" onclick={onreset}><Icon name="reset" size={17} /></button></div>
+    <div class="filter-actions"><button class="button button-primary" type="submit">{busy ? 'Apply new filters' : 'Apply filters'}<Icon name="arrow" size={16} /></button><button class="button-icon reset-button" type="button" aria-label="Reset all filters" title="Reset all filters" onclick={onreset}><Icon name="reset" size={17} /></button></div>
   </div>
   {#if error}<p class="filter-error" role="alert">{error}</p>{/if}
 </form>

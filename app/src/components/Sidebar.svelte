@@ -1,7 +1,7 @@
 <script>
   import Icon from './Icon.svelte';
   import { REPORTS } from '../lib/config.js';
-  let { selected, onselect, open = false, onclose } = $props();
+  let { selected, onselect, open = false, onclose, sourceLabel = 'CONNECTING' } = $props();
 </script>
 
 {#if open}<button class="sidebar-scrim" aria-label="Close navigation" onclick={onclose}></button>{/if}
@@ -14,7 +14,7 @@
   <nav class="report-nav" aria-label="Analytical reports">
     {#each REPORTS as report}
       <button class:active={selected === report.id} aria-current={selected === report.id ? 'page' : undefined} onclick={() => onselect(report.id)}>
-        <Icon name={report.icon} /><span>{report.label}</span>
+        <Icon name={report.icon} /><span>{report.label}{#if report.wip} <small class="wip-tag">(WIP)</small>{/if}</span>
         {#if selected === report.id}<span class="nav-indicator"></span>{/if}
       </button>
     {/each}
@@ -26,7 +26,7 @@
     <div class="taxi-stripe"></div>
   </div>
   <div class="sidebar-bottom">
-    <div class="data-status"><span class="status-dot"></span><span>Sample data mode</span></div>
+    <div class="data-status"><span class="status-dot"></span><span>{sourceLabel === 'LIVE DATABASE' ? 'Live warehouse connected' : sourceLabel === 'CONNECTING' ? 'Connecting to warehouse…' : sourceLabel === 'WIP' ? 'Work in progress' : 'Warehouse unavailable'}</span></div>
     <div class="project-label">STADVDB <span>MCO1 / GROUP PROJECT</span></div>
   </div>
 </aside>
