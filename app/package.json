@@ -12,7 +12,10 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/*.test.js",
-    "test:live": "node scripts/verify-live.js"
+    "test:live": "node scripts/verify-live.js",
+    "test:queries:live": "node scripts/benchmark-reports.js --fixtures-only",
+    "benchmark:reports": "node scripts/benchmark-reports.js",
+    "db:index:dashboard": "node scripts/install-dashboard-index.js"
   },
   "dependencies": { "express": "^5.1.0", "mysql2": "^3.15.0", "svelte": "^5.0.0" },
   "devDependencies": {

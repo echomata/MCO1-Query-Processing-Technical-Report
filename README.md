@@ -1,9 +1,9 @@
 # STADVDB MCO1 — NYC Taxi Analytics
 
 Meter is the Svelte + Vite dashboard and Express API for the team's NYC Taxi warehouse.
-Overview, trends, pickup locations, and payment reports now query MySQL. The dashboard
-never falls back to synthetic figures. Optimization comparison is marked **(WIP)** until
-the team supplies its actual measurements.
+Overview, trends, pickup locations, and payment reports query MySQL. The dashboard
+never falls back to synthetic figures. Optimization comparisons belong in the report;
+there is no Optimization page in the website.
 
 ## Run locally
 
@@ -72,7 +72,7 @@ they do not need to start their own database to view it.
 
 Keep this terminal and your PC running. Ctrl+C stops the server and tunnel. Visitors
 may see ngrok's browser warning before reaching the login prompt. The local request
-inspection feature is disabled. Sharing does not speed up the baseline queries, so
+inspection feature is disabled. Sharing does not speed up database queries, so
 start with a small month range.
 
 This uses the built site rather than Vite's development server, so no Vite hostname
@@ -85,19 +85,22 @@ allowlist or separate API tunnel is needed. After code or SQL changes, stop and 
 npm test           # API contract, filters, weighted totals, errors and no-mock behavior
 npm run build     # Build the Svelte frontend
 npm run test:live # Explicit read-only checks against your configured populated DB
+npm run test:queries:live # SQL fixture equivalence checks on MySQL (no data writes)
+npm run benchmark:reports # January baseline/optimized comparison (may take minutes)
+npm run db:index:dashboard # Optional one-time covering-index build on this warehouse
 npm start         # Serve the build and API together at http://127.0.0.1:3001
 ```
 
 `test:live` uses January / Staten Island as a small selection and compares all four
 API reports with a direct SQL aggregate. It does not change warehouse data.
 For separate development terminals use `npm run dev:api` and `npm run dev:client`.
-Use `npm run dev` for routine local work; full-year baseline queries may take minutes.
+Use `npm run dev` for routine local work; large queries may take minutes.
 The default SELECT budget is 180 seconds (maximum configurable 210 seconds).
 On timeout, narrow the month range or use the team's equivalent optimized SQL.
 The dashboard opens on **January 2025** to avoid an expensive automatic full-year
-scan. Full-year baseline reports exceeded the 180-second budget on the current
-machine during verification; they remain a performance limitation for the team to
-address. Filters can be reapplied while a request is running to cancel that request.
+scan. Full-year baseline reports previously exceeded the 180-second budget on this
+machine; the January optimization measurements do not establish full-year performance.
+Filters can be reapplied while a request is running to cancel that request.
 
 ## Data definitions
 
@@ -120,24 +123,51 @@ address. Filters can be reapplied while a request is running to cancel that requ
 
 ## Team handoff
 
-Baseline SQL is isolated in `app/server/reports.js` (`buildReportQuery`). All-borough
-reports specify fact-first join order to avoid poor location-first estimates. Replace it
-with equivalent optimized SQL while preserving filters and the aggregate aliases.
-No indexes, schema changes, ETL runs or data updates are performed by this API.
-Responses are not cached; benchmark work should record execution plans, repeat runs
-under controlled conditions, and check original/optimized results are equivalent.
+Dashboard SQL is isolated in `app/server/reports.js` (`buildReportQuery`).
+All-borough requests aggregate trips by period/payment and pickup-zone key before
+joining location labels. Specific borough requests preserve selective joins.
+
+The optional `idx_dashboard_cover_v1` index covers pickup time, location, payment
+and the four measures. Install it once with `npm.cmd run db:index:dashboard`; the
+build needs extra disk space and may take minutes across the full fact table.
+Use `npm.cmd run db:index:dashboard -- --status` to inspect installation.
+The equivalent one-time Workbench SQL is `sql/dashboard_covering_index.sql`.
+The installer is idempotent and never replaces an unexpected existing definition.
+
+This index stays INVISIBLE. Only dashboard SELECTs opt into it with a per-statement
+`SET_VAR` hint; global settings, pooled session defaults and OLAP SQL are unchanged.
+The API checks the exact index definition and visibility at most once per 30 seconds.
+Without this index, teammates automatically retain the previous dashboard queries:
+the existing pickup-time index for a single all-borough month, optimizer choice for
+wider ranges. No index is created automatically when the server starts.
+
+Each API request executes live SQL without a server result cache. Navigating between
+Overview and Trip Trends reuses the already displayed selection when all applied
+filters match, keeping its original retrieval time and query time. Apply, Reset and
+Retry request fresh warehouse data.
+
+`npm run benchmark:reports` compares the frozen original SQL with the current SQL,
+checks summary and every series/borough group, and prints timings and execution-plan
+access paths. By default it runs one January sample per distinct query; use
+`npm run benchmark:reports -- --runs=3` for repeated samples with alternating order.
+Use `npm run benchmark:reports -- --covering --runs=3` to isolate the covering index
+against the preceding query-rewrite version, instead of comparing to the original SQL.
+Run against an unchanged warehouse without competing heavy queries. SQL fixtures
+also cover refunds, unknown codes, boundaries, empty selections and wider date ranges.
+See [dashboard optimization notes](docs/dashboard-optimization.md) for measured scope.
+See [covering-index notes](docs/dashboard-covering-index.md) for the second optimization.
 
 The existing four report views are live, and the OLAP Explorer now provides hierarchy
 drill-down/roll-up, filter-based slice/dice, and pivot operations against the warehouse.
 The current location hierarchy is borough -> service zone -> taxi zone; the exact
 cross-dimension borough -> taxi zone -> day flow still requires verification.
-Optimization has a WIP page.
+OLAP SQL remains in `app/server/olap.js` for the teammate's separate optimization work.
 
 ## Structure
 
 ```text
-app/server/        Express routes, MySQL connection, baseline aggregate SQL, .env.example
-app/scripts/       Combined dev launcher and opt-in live verification
+app/server/        Express routes, MySQL connection, dashboard and OLAP SQL, .env.example
+app/scripts/       Launchers, opt-in live verification and dashboard benchmarks
 app/src/           Svelte dashboard, shared filters, HTTP report service
 app/src/mock/      Legacy fixture file; never imported by the running app
 app/tests/         Automated API and service tests (test fixtures only)

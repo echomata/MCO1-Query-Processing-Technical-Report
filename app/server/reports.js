@@ -1,18 +1,15 @@
 import { MONTHS, PAYMENTS } from '../src/lib/config.js';
+import { DASHBOARD_COVER_INDEX } from './dashboardIndex.js';
 
 export const LIVE_REPORTS = ['overview', 'time', 'locations', 'payments'];
 
-// One aggregate SELECT per report; summary and chart use exactly the same rows.
-// Baseline SQL: replace with equivalent optimized SQL when the team is ready.
-export function buildReportQuery(report, filters, timeoutMs = 180_000) {
+// One SELECT per request; every displayed measure uses the same filtered rows.
+export function buildReportQuery(report, filters, timeoutMs = 180_000, { useCoveringIndex = false } = {}) {
   if (!LIVE_REPORTS.includes(report)) throw new Error('Unknown live report');
   const period = { month: 'MONTH(f.pickup_datetime)', quarter: 'QUARTER(f.pickup_datetime)', year: 'YEAR(f.pickup_datetime)' }[filters.granularity];
   const payment = "CASE WHEN f.payment_sk = 1 THEN 'card' WHEN f.payment_sk = 2 THEN 'cash' ELSE 'other' END";
   const groupKey = report === 'locations' ? 'l.location_sk' : report === 'payments' ? payment : period;
   const groupLabel = report === 'locations' ? 'l.zone' : groupKey;
-  // Without a borough restriction, scanning facts first avoids one large random
-  // lookup per pickup zone when warehouse statistics underestimate trip counts.
-  const join = filters.borough === 'all' ? 'STRAIGHT_JOIN' : 'JOIN';
   const start = `${filters.year}-${String(filters.startMonth).padStart(2, '0')}-01`;
   const end = filters.endMonth === 12 ? `${filters.year + 1}-01-01` : `${filters.year}-${String(filters.endMonth + 1).padStart(2, '0')}-01`;
   const conditions = ['f.pickup_datetime >= ?', 'f.pickup_datetime < ?'];
@@ -22,8 +19,47 @@ export function buildReportQuery(report, filters, timeoutMs = 180_000) {
     conditions.push('f.payment_sk = ?'); values.push(filters.paymentType === 'card' ? 1 : 2);
   } else if (filters.paymentType === 'other') conditions.push('f.payment_sk NOT IN (1, 2)');
   const maxMs = Math.max(1, Math.trunc(timeoutMs));
+  // SET_VAR applies only to this SELECT, including its derived table. It does
+  // not enable invisible indexes on the pooled session or on OLAP statements.
+  const hint = `/*+ MAX_EXECUTION_TIME(${maxMs})${useCoveringIndex ? " SET_VAR(optimizer_switch='use_invisible_indexes=on')" : ''} */`;
+  const version = useCoveringIndex ? 'dashboard-v3-covering' : 'dashboard-v2';
+  if (filters.borough === 'all') {
+    // Reduce millions of trips to period/payment and pickup-zone groups
+    // before looking up location labels. SUM the counts, never AVG the averages.
+    const factKey = report === 'locations' ? 'f.pu_location_sk' : groupKey;
+    // Measured on the populated warehouse: the optimizer otherwise scans the
+    // entire fact table for a single month. Without the covering index, keep
+    // its choice for wider ranges.
+    const index = useCoveringIndex ? ` FORCE INDEX (${DASHBOARD_COVER_INDEX})`
+      : filters.startMonth === filters.endMonth ? ' FORCE INDEX (idx_pickup_ts)' : '';
+    return {
+      sql: `SELECT ${hint}
+        a.group_key, ${report === 'locations' ? 'l.zone' : 'a.group_key'} AS group_label, l.borough,
+        SUM(a.trips) AS trips,
+        SUM(a.revenue_cents) AS revenue_cents,
+        SUM(a.fare_cents) AS fare_cents,
+        SUM(a.distance_total) AS distance_total,
+        SUM(a.duration_total) AS duration_total
+      FROM (
+        SELECT ${factKey} AS group_key, f.pu_location_sk,
+          COUNT(*) AS trips,
+          SUM(f.total_amount) * 100 AS revenue_cents,
+          SUM(f.fare_amount) * 100 AS fare_cents,
+          SUM(f.trip_distance) AS distance_total,
+          SUM(f.duration_min) AS duration_total
+        FROM fact_trip f${index}
+        WHERE ${conditions.join(' AND ')}
+        GROUP BY group_key, f.pu_location_sk
+      ) a
+      JOIN dim_location l ON l.location_sk = a.pu_location_sk
+      GROUP BY a.group_key, group_label, l.borough`,
+      values, version,
+    };
+  }
+  // A selective borough (e.g. Staten Island) can use the existing location index
+  // to avoid reading every trip in the month. Preserve that access path.
   return {
-    sql: `SELECT /*+ MAX_EXECUTION_TIME(${maxMs}) */
+    sql: `SELECT ${hint}
       ${groupKey} AS group_key, ${groupLabel} AS group_label, l.borough,
       COUNT(*) AS trips,
       SUM(f.total_amount) * 100 AS revenue_cents,
@@ -31,10 +67,10 @@ export function buildReportQuery(report, filters, timeoutMs = 180_000) {
       SUM(f.trip_distance) AS distance_total,
       SUM(f.duration_min) AS duration_total
     FROM fact_trip f
-    ${join} dim_location l ON l.location_sk = f.pu_location_sk
+    JOIN dim_location l ON l.location_sk = f.pu_location_sk
     WHERE ${conditions.join(' AND ')}
     GROUP BY group_key, group_label, l.borough`,
-    values,
+    values, version,
   };
 }
 
@@ -47,7 +83,7 @@ function add(total, row) {
   total.duration += Number(row.duration_total);
 }
 
-export function formatReport(report, filters, rows, queryMs) {
+export function formatReport(report, filters, rows, queryMs, queryVersion = 'dashboard-v2') {
   const total = emptyTotals();
   const series = new Map();
   const boroughs = new Map();
@@ -82,7 +118,7 @@ export function formatReport(report, filters, rows, queryMs) {
     series: output,
     boroughs: [...boroughs.values()].map(measures).sort((a, b) => b.trips - a.trips),
     meta: { source: 'warehouse', status: 'ready', currency: 'USD', year: filters.year,
-      generatedAt: new Date().toISOString(), queryMs: Math.round(queryMs), queryVersion: 'baseline',
+      generatedAt: new Date().toISOString(), queryMs: Math.round(queryMs), queryVersion,
       dateBasis: 'pickup_datetime', revenueBasis: 'SUM(total_amount)' },
   };
 }

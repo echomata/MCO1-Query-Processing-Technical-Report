@@ -7,7 +7,8 @@ on the same local origin. All API responses have `Cache-Control: no-store`.
 ## Reports and filters
 
 Live report IDs: `overview`, `time`, `locations`, `payments`.
-`optimization` returns HTTP 501 / `REPORT_WIP`; its UI displays (WIP) with no figures.
+`optimization` is absent from navigation. Its retired API ID retains HTTP 501 /
+`REPORT_WIP` for compatibility; performance comparisons belong in the report.
 Unknown report IDs return 404. There is no mock mode or fallback.
 
 | Parameter | Default | Meaning |
@@ -53,7 +54,8 @@ Shape only; `n` below denotes a numeric value, not a measured example:
   boroughs: [{ key, label, trips: n, revenue: n, averageFare: n, share: n }],
   meta: {
     source: "warehouse", status: "ready", currency: "USD", year: 2025,
-    generatedAt: ISO_timestamp, queryMs: n, queryVersion: "baseline",
+    generatedAt: ISO_timestamp, queryMs: n,
+    queryVersion: "dashboard-v3-covering" or "dashboard-v2",
     dateBasis: "pickup_datetime", revenueBasis: "SUM(total_amount)"
   }
 }
@@ -62,6 +64,16 @@ Shape only; `n` below denotes a numeric value, not a measured example:
 Each request executes one grouped SELECT. Summary/series/borough aggregates all derive
 from that selection; averages use summed numerators divided by trip counts. DECIMAL
 strings from MySQL are converted to JSON numbers, with monetary accumulation in cents.
+All-borough queries aggregate facts before joining location labels. The API detects
+the optional invisible `idx_dashboard_cover_v1` index with a metadata lookup cached
+for 30 seconds. Dashboard SELECTs alone enable invisible-index use with `SET_VAR`;
+all-borough queries then read the covering index. Borough-specific queries retain
+optimizer choice for selective joins. The data response itself is not cached.
+
+Without the exact invisible index definition, the API falls back to `dashboard-v2`:
+the existing `idx_pickup_ts` index for single all-borough months and optimizer choice
+for wider ranges. The API never creates indexes or changes global/session defaults.
+OLAP SELECTs do not receive the dashboard hint and do not run index detection.
 
 - Overview/time: group by selected period and borough; series sorted chronologically.
 - Locations: group by pickup location key, zone label and borough; sorted by trips.
@@ -94,20 +106,32 @@ Errors use `{error:{code,message}}`:
 | 503 | DATABASE_UNAVAILABLE | Connection, credentials, schema or database request failure |
 | 504 | QUERY_TIMEOUT | SELECT exceeded its configured server execution budget |
 
+Overview and Trip Trends have identical SQL for identical filters. Navigation can
+reuse the displayed result while preserving its `generatedAt` and `queryMs`;
+Apply/Reset/Retry always send a fresh API request.
 The browser hides previous results while loading or on failure. Export is enabled
 only for valid warehouse responses. Cancelling a request closes its MySQL connection;
 no example data is substituted. Cancellation attempts `KILL QUERY` on that request's
 own MySQL connection, then closes it. If cancellation is unavailable, the SELECT
 execution budget still applies. The pool limits concurrent queries and queued requests.
-Full-year baseline requests exceeded 180 seconds on the current machine; use narrower
-selections until the team's equivalent optimized queries are integrated. OLAP requests
-use the same configured query budget and currently execute against the raw fact table.
+Full-year baseline requests previously exceeded 180 seconds on this machine.
+The dashboard's January comparison does not establish full-year performance.
+OLAP requests use the same configured query budget and still execute against the
+raw fact table.
 
 ## Optimization handoff
 
-`app/server/reports.js` owns baseline SQL and the aggregate result contract:
+`app/server/reports.js` owns dashboard SQL and the aggregate result contract:
 `group_key`, `group_label`, `borough`, `trips`, `revenue_cents`, `fare_cents`,
 `distance_total`, `duration_total`. Preserve semantics and aliases when changing SQL.
 Query timings here are request diagnostics, not controlled original-versus-optimized
-measurements. The exact cross-dimension daily drill-down and measured optimization
-comparisons remain separate pending work.
+measurements. Formal repeated OLAP optimization comparisons remain separate work.
+See [dashboard optimization notes](dashboard-optimization.md) for the dashboard's
+measured scope and initial results.
+
+`npm run test:queries:live` executes 96 fixture comparisons on MySQL using CTEs,
+without modifying tables. `npm run benchmark:reports` compares the frozen original
+dashboard SQL in `app/scripts/lib/baseline-reports.js` with the running builder on
+January warehouse data. Both commands require the local backend `.env` settings.
+`--covering` compares the previous rewrite with the covering-index path; `--runs=3`
+repeats measurements with alternating execution order.

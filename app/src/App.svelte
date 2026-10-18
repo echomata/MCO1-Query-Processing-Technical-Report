@@ -9,7 +9,7 @@
   import OlapExplorer from './components/OlapExplorer.svelte';
   import { DEFAULT_FILTERS, MONTHS, PAYMENTS, REPORTS } from './lib/config.js';
   import { compact, currency, decimal } from './lib/format.js';
-  import { getReport, validateFilters } from './services/reportService.js';
+  import { getReport, reuseReport, validateFilters } from './services/reportService.js';
 
   let selected = $state('overview');
   let filters = $state({ ...DEFAULT_FILTERS });
@@ -42,7 +42,15 @@
     } finally { if (!controller.signal.aborted) loading = false; }
   }
 
-  function selectReport(id) { selected = id; menuOpen = false; if (!REPORTS.find((item) => item.id === id)?.custom) loadReport(); }
+  function selectReport(id) {
+    const next = REPORTS.find((item) => item.id === id);
+    if (!next) return;
+    const reusable = !loading && !error ? reuseReport(report, id, filters) : null;
+    selected = id; menuOpen = false;
+    if (next.custom) { requestController?.abort(); loading = false; return; }
+    if (reusable) { report = reusable; return; }
+    loadReport();
+  }
   function applyFilters(next) {
     try { filters = validateFilters(next); filterError = ''; loadReport(); }
     catch (problem) { filterError = problem.message; }
@@ -86,7 +94,7 @@
     {#if activeReport.custom}
       <OlapExplorer />
     {:else}
-    <div class="source-notice"><Icon name="info" size={17} /><p><strong>Live warehouse reports.</strong> Figures use the selected pickup dates and stored total charges. Baseline queries may take a few minutes.</p></div>
+    <div class="source-notice"><Icon name="info" size={17} /><p><strong>Live warehouse reports.</strong> Figures use the selected pickup dates and stored total charges. Apply filters to refresh the data. Large selections may take a few minutes.</p></div>
     <FilterPanel {filters} onapply={applyFilters} onreset={resetFilters} busy={loading} error={filterError} />
     <div class="selection-line"><span><span class="selection-dot"></span>{rangeLabel}<span class="divider">/</span>{filters.borough === 'all' ? 'All boroughs' : filters.borough}<span class="divider">/</span>{filters.paymentType === 'all' ? 'All payment methods' : PAYMENTS.find((p) => p.id === filters.paymentType)?.label}</span><span class="selection-count">{isTime ? `${filters.granularity.charAt(0).toUpperCase() + filters.granularity.slice(1)} level` : activeReport.label}</span></div>
     <section class="report-content" aria-busy={loading} aria-label="Report results">

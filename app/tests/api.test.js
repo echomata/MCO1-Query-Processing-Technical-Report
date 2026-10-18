@@ -42,10 +42,12 @@ test('query binds exclusive date bounds, borough and payment, and allows only fi
   assert.ok(!query.sql.includes('Queens'));
   assert.match(query.sql, /SUM\(f.total_amount\)/);
   assert.deepEqual(buildReportQuery('overview', { ...DEFAULT_FILTERS, endMonth: 12 }).values, ['2025-01-01', '2026-01-01']);
-  assert.match(buildReportQuery('overview', DEFAULT_FILTERS).sql, /STRAIGHT_JOIN/);
+  assert.match(buildReportQuery('overview', DEFAULT_FILTERS).sql, /SUM\(a.trips\)/);
+  assert.match(buildReportQuery('overview', DEFAULT_FILTERS).sql, /FORCE INDEX \(idx_pickup_ts\)/);
+  assert.doesNotMatch(buildReportQuery('overview', { ...DEFAULT_FILTERS, endMonth: 12 }).sql, /FORCE INDEX/);
   assert.ok(!query.sql.includes('STRAIGHT_JOIN'));
   assert.match(buildReportQuery('payments', { ...DEFAULT_FILTERS, paymentType: 'other' }).sql, /NOT IN \(1, 2\)/);
-  assert.match(buildReportQuery('locations', DEFAULT_FILTERS).sql, /l.location_sk AS group_key/);
+  assert.match(buildReportQuery('locations', DEFAULT_FILTERS).sql, /f.pu_location_sk AS group_key/);
   assert.throws(() => buildReportQuery('unknown', DEFAULT_FILTERS));
   for (const params of ['year=2024', 'startMonth=0', 'startMonth=2&startMonth=3', 'sort=DROP', 'paymentType=9', 'borough=Invalid']) assert.throws(() => parseFilters(new URLSearchParams(params)));
 });
@@ -86,6 +88,33 @@ test('HTTP contract: live JSON, validation, WIP, unavailable DB and timeouts', a
   assert.ok(!(await unavailable.text()).includes('secret-password'));
   failure = Object.assign(new Error('timeout'), { errno: 3024 });
   assert.equal((await fetch(`${url}/api/reports/overview`)).status, 504);
+});
+
+test('covering-index hints and detection are confined to dashboard endpoints', async (t) => {
+  const captured = [];
+  let probes = 0;
+  const database = {
+    queryTimeoutMs: 123000,
+    dashboardIndexReady: async () => { probes++; return true; },
+    query: async (sql) => { captured.push(sql); return []; },
+  };
+  const server = createApp({ database, logger: { error() {} } }).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const url = `http://127.0.0.1:${server.address().port}`;
+  for (const report of ['overview', 'time', 'locations', 'payments']) {
+    const response = await fetch(`${url}/api/reports/${report}`);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).meta.queryVersion, 'dashboard-v3-covering');
+    assert.match(captured.at(-1), /SET_VAR\(optimizer_switch='use_invisible_indexes=on'\)/);
+    assert.match(captured.at(-1), /FORCE INDEX \(idx_dashboard_cover_v1\)/);
+  }
+  assert.equal(probes, 4);
+  for (const operation of ['hierarchy', 'rollup', 'pivot']) {
+    assert.equal((await fetch(`${url}/api/olap/${operation}`)).status, 200);
+    assert.doesNotMatch(captured.at(-1), /SET_VAR|idx_dashboard_cover_v1/);
+  }
+  assert.equal(probes, 4, 'OLAP must not enable or probe the dashboard index');
 });
 
 test('sharing requires authentication for the website and every API route', async (t) => {

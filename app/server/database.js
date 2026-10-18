@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { createDashboardIndexProbe } from './dashboardIndex.js';
 
 export function createDatabase(env = process.env) {
   if (!Object.hasOwn(env, 'DB_PASSWORD')) throw new Error('Set DB_PASSWORD in app/server/.env (copy .env.example first).');
@@ -15,8 +16,13 @@ export function createDatabase(env = process.env) {
   };
   const pool = mysql.createPool({ ...options, connectionLimit: 2 });
   const control = mysql.createPool({ ...options, connectionLimit: 1 });
+  const dashboardIndexReady = createDashboardIndexProbe(async (sql, values) => {
+    const [rows] = await pool.execute(sql, values);
+    return rows;
+  });
   return {
     queryTimeoutMs,
+    dashboardIndexReady,
     async query(sql, values = [], signal) {
       signal?.throwIfAborted();
       const connection = await pool.getConnection();

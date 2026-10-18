@@ -45,10 +45,11 @@ export function createApp({ database, distPath, logger = console, shareAuth }) {
     const onClose = () => { if (!res.writableEnded) controller.abort(); };
     res.on('close', onClose);
     try {
-      const query = buildReportQuery(report, filters, database.queryTimeoutMs);
+      const useCoveringIndex = await database.dashboardIndexReady?.() ?? false;
+      const query = buildReportQuery(report, filters, database.queryTimeoutMs, { useCoveringIndex });
       const started = performance.now();
       const rows = await database.query(query.sql, query.values, controller.signal);
-      if (!controller.signal.aborted) res.json(formatReport(report, filters, rows, performance.now() - started));
+      if (!controller.signal.aborted) res.json(formatReport(report, filters, rows, performance.now() - started, query.version));
     } catch (error) { if (!controller.signal.aborted) unavailable(res, error); }
     finally { res.off('close', onClose); }
   });
