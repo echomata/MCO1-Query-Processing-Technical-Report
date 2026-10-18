@@ -26,6 +26,8 @@ export function createDatabase(env = process.env) {
     async query(sql, values = [], signal) {
       signal?.throwIfAborted();
       const connection = await pool.getConnection();
+      // A cancelled query destroys its socket; without a listener the resulting ECONNRESET is uncaught and kills the API.
+      const ignoreSocketError = () => {};
       // Disconnect alone may leave a SELECT running on MySQL. Cancel only this
       // checked-out connection's query before discarding it; never kill others.
       const cancel = () => {
@@ -33,6 +35,7 @@ export function createDatabase(env = process.env) {
         void control.query(`KILL QUERY ${threadId}`).catch(() => {}).finally(() => connection.destroy());
       };
       if (signal?.aborted) { connection.release(); signal.throwIfAborted(); }
+      connection.on('error', ignoreSocketError);
       signal?.addEventListener('abort', cancel, { once: true });
       try {
         const [rows] = await connection.execute(sql, values);
@@ -40,6 +43,7 @@ export function createDatabase(env = process.env) {
         return rows;
       } finally {
         signal?.removeEventListener('abort', cancel);
+        connection.off('error', ignoreSocketError);
         if (!signal?.aborted) connection.release();
       }
     },

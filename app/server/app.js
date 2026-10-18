@@ -53,12 +53,19 @@ export function createApp({ database, distPath, logger = console, shareAuth }) {
     } catch (error) { if (!controller.signal.aborted) unavailable(res, error); }
     finally { res.off('close', onClose); }
   });
+  // Results only change when the warehouse is reloaded, so repeat requests within a few minutes are served from memory.
+  const olapCache = new Map();
+  const OLAP_CACHE_MS = 5 * 60_000;
+  const OLAP_CACHE_MAX = 100;
   app.get('/api/olap/:operation', async (req, res) => {
     const operation = req.params.operation;
     if (!OLAP_OPERATIONS.includes(operation)) return sendError(res, 404, 'REPORT_NOT_FOUND', 'That OLAP operation is not available.');
     let request;
     try { request = parseOlapRequest(operation, new URL(req.originalUrl, 'http://localhost').searchParams); }
     catch (error) { return sendError(res, 400, 'INVALID_FILTERS', error.message); }
+    const cacheKey = JSON.stringify([operation, request]);
+    const hit = olapCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < OLAP_CACHE_MS) return res.json({ ...hit.payload, meta: { ...hit.payload.meta, cached: true } });
     const controller = new AbortController();
     const onClose = () => { if (!res.writableEnded) controller.abort(); };
     res.on('close', onClose);
@@ -66,7 +73,12 @@ export function createApp({ database, distPath, logger = console, shareAuth }) {
       const query = buildOlapQuery(operation, request, database.queryTimeoutMs);
       const started = performance.now();
       const rows = await database.query(query.sql, query.values, controller.signal);
-      if (!controller.signal.aborted) res.json(formatOlap(operation, request, query, rows, performance.now() - started));
+      if (!controller.signal.aborted) {
+        const payload = formatOlap(operation, request, query, rows, performance.now() - started);
+        if (olapCache.size >= OLAP_CACHE_MAX) olapCache.delete(olapCache.keys().next().value);
+        olapCache.set(cacheKey, { at: Date.now(), payload });
+        res.json(payload);
+      }
     } catch (error) { if (!controller.signal.aborted) unavailable(res, error); }
     finally { res.off('close', onClose); }
   });

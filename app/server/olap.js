@@ -4,38 +4,85 @@ import { HIERARCHIES, OLAP_YEAR, PIVOT_DIMENSIONS, memberLabel } from '../src/li
 
 export const OLAP_OPERATIONS = ['hierarchy', 'rollup', 'pivot'];
 
-const PAYMENT_CASE = "CASE WHEN f.payment_sk = 1 THEN 'card' WHEN f.payment_sk = 2 THEN 'cash' ELSE 'other' END";
 const PAYMENT_SK = { card: 'f.payment_sk = 1', cash: 'f.payment_sk = 2', other: 'f.payment_sk NOT IN (1, 2)' };
 
 // Every identifier that reaches SQL comes from this whitelist; user input is only ever bound as a value.
+// Time and payment parts come from the pre-aggregated derived table `a` (see baseTable), not from dim_date.
 const EXPR = {
-  year: 'd.year', quarter: 'd.quarter', month: 'd.month',
-  day: "DATE_FORMAT(d.full_date, '%Y-%m-%d')",
+  year: 'YEAR(a.pickup_date)', quarter: 'QUARTER(a.pickup_date)', month: 'MONTH(a.pickup_date)',
+  day: "DATE_FORMAT(a.pickup_date, '%Y-%m-%d')",
   borough: 'l.borough', service_zone: 'l.service_zone', zone: 'l.zone',
-  payment: PAYMENT_CASE,
-  daytype: "CASE WHEN d.is_weekend = 1 THEN 'weekend' ELSE 'weekday' END",
+  payment: "CASE a.payment_bucket WHEN 1 THEN 'card' WHEN 2 THEN 'cash' ELSE 'other' END",
+  daytype: "CASE WHEN DAYOFWEEK(a.pickup_date) IN (1, 7) THEN 'weekend' ELSE 'weekday' END",
 };
 
-function slicerConditions(filters) {
+// Every measure is a SUM over the derived table, so averages stay exact (sum of sums over sum of counts).
+const MEASURE = {
+  trips: 'SUM(a.trips)',
+  revenue: 'SUM(a.revenue)',
+  fare: 'SUM(a.fare_sum) / SUM(a.trips)',
+  distance: 'SUM(a.distance_sum) / SUM(a.trips)',
+  tripsIf: (c) => `SUM(CASE WHEN ${c} THEN a.trips END)`,
+  revenueIf: (c) => `SUM(CASE WHEN ${c} THEN a.revenue END)`,
+  fareIf: (c) => `SUM(CASE WHEN ${c} THEN a.fare_sum END) / SUM(CASE WHEN ${c} THEN a.trips END)`,
+};
+
+// One scan of fact_trip reduces millions of trips to day x pickup zone x payment groups (tens of thousands).
+// Date range and payment filters run here, on the indexed fact columns, before any join.
+function baseTable(filters) {
   const start = `${OLAP_YEAR}-${String(filters.startMonth).padStart(2, '0')}-01`;
   const end = filters.endMonth === 12 ? `${OLAP_YEAR + 1}-01-01` : `${OLAP_YEAR}-${String(filters.endMonth + 1).padStart(2, '0')}-01`;
   const conditions = ['f.pickup_datetime >= ?', 'f.pickup_datetime < ?'];
-  const values = [start, end];
-  if (filters.boroughs.length) {
+  if (filters.payments.length > 0) conditions.push(`(${filters.payments.map((payment) => PAYMENT_SK[payment]).join(' OR ')})`);
+  return {
+    values: [start, end],
+    sql: `(SELECT DATE(f.pickup_datetime) AS pickup_date, f.pu_location_sk,
+        CASE WHEN f.payment_sk = 1 THEN 1 WHEN f.payment_sk = 2 THEN 2 ELSE 3 END AS payment_bucket,
+        COUNT(*) AS trips, SUM(f.total_amount) AS revenue,
+        SUM(f.fare_amount) AS fare_sum, SUM(f.trip_distance) AS distance_sum
+      FROM fact_trip f
+      WHERE ${conditions.join('\n        AND ')}
+      GROUP BY DATE(f.pickup_datetime), f.pu_location_sk, payment_bucket) a`,
+  };
+}
+
+// Filters that need a dimension attribute run on the small aggregated set.
+function outerConditions(filters) {
+  const conditions = [];
+  const values = [];
+  if (filters.boroughs.length > 0) {
     conditions.push(`l.borough IN (${filters.boroughs.map(() => '?').join(', ')})`);
     values.push(...filters.boroughs);
   }
-  if (filters.payments.length) conditions.push(`(${filters.payments.map((p) => PAYMENT_SK[p]).join(' OR ')})`);
-  if (filters.dayType !== 'all') conditions.push(`d.is_weekend = ${filters.dayType === 'weekend' ? 1 : 0}`);
+  if (filters.dayType !== 'all') conditions.push(`DAYOFWEEK(a.pickup_date) ${filters.dayType === 'weekend' ? 'IN' : 'NOT IN'} (1, 7)`);
   return { conditions, values };
 }
 
-function fromClause(...fragments) {
-  const text = fragments.join(' ');
-  const joins = [];
-  if (/\bd\./.test(text)) joins.push('JOIN dim_date d ON d.date_sk = f.pickup_date_sk');
-  if (/\bl\./.test(text)) joins.push('JOIN dim_location l ON l.location_sk = f.pu_location_sk');
-  return ['FROM fact_trip f', ...joins].join('\n    ');
+// dim_location is only joined (against the small aggregate) when a location attribute is used.
+function fromClause(base, text) {
+  return [`FROM ${base.sql}`, ...(/\bl\./.test(text) ? ['JOIN dim_location l ON l.location_sk = a.pu_location_sk'] : [])].join('\n    ');
+}
+
+function statement({ select, groupBy, orderBy }, filters, timeoutMs, { conditions = [], values = [] } = {}) {
+  const base = baseTable(filters);
+  const outer = outerConditions(filters);
+  const where = [...conditions, ...outer.conditions];
+  return {
+    sql: `SELECT ${hint(timeoutMs)} ${select}
+    ${fromClause(base, [select, groupBy, ...where].join(' '))}${where.length ? `\n    WHERE ${where.join('\n      AND ')}` : ''}
+    GROUP BY ${groupBy}${orderBy ? `\n    ORDER BY ${orderBy}` : ''}`,
+    values: [...base.values, ...values, ...outer.values],
+  };
+}
+
+// Drilling into a time member narrows the indexed date range itself, so deeper levels scan fewer fact rows.
+function narrowByTimePath(filters, path) {
+  const [year, quarter, month] = path;
+  let low = filters.startMonth;
+  let high = filters.endMonth;
+  if (quarter) { low = Math.max(low, quarter * 3 - 2); high = Math.min(high, quarter * 3); }
+  if (month) { low = Math.max(low, month); high = Math.min(high, month); }
+  return { filters: { ...filters, startMonth: low, endMonth: high }, empty: year !== undefined && year !== OLAP_YEAR };
 }
 
 const hint = (timeoutMs) => `/*+ MAX_EXECUTION_TIME(${Math.max(1, Math.trunc(timeoutMs))}) */`;
@@ -44,50 +91,42 @@ const hint = (timeoutMs) => `/*+ MAX_EXECUTION_TIME(${Math.max(1, Math.trunc(tim
 function hierarchyQuery({ dimension, path }, filters, timeoutMs) {
   const levels = HIERARCHIES[dimension].levels;
   const expr = EXPR[levels[path.length].id];
-  const slicer = slicerConditions(filters);
-  const pathConditions = path.map((_, i) => `${EXPR[levels[i].id]} = ?`);
-  const where = [...pathConditions, ...slicer.conditions].join('\n      AND ');
   const isTime = dimension === 'time';
+  let effective = filters;
+  const conditions = [];
+  const values = [];
+  if (isTime) {
+    const narrowed = narrowByTimePath(filters, path);
+    effective = narrowed.filters;
+    if (narrowed.empty) conditions.push('1 = 0');
+  } else {
+    path.forEach((value, i) => { conditions.push(`${EXPR[levels[i].id]} = ?`); values.push(value); });
+  }
   const windows = isTime
-    ? `LAG(COUNT(*)) OVER (ORDER BY ${expr}) AS prev_trips,
-      SUM(COUNT(*)) OVER (ORDER BY ${expr} ROWS UNBOUNDED PRECEDING) AS cumulative_trips`
+    ? `LAG(${MEASURE.trips}) OVER (ORDER BY ${expr}) AS prev_trips,
+      SUM(${MEASURE.trips}) OVER (ORDER BY ${expr} ROWS UNBOUNDED PRECEDING) AS cumulative_trips`
     : `NULL AS prev_trips,
-      SUM(COUNT(*)) OVER (ORDER BY COUNT(*) DESC, ${expr} ROWS UNBOUNDED PRECEDING) AS cumulative_trips`;
+      SUM(${MEASURE.trips}) OVER (ORDER BY ${MEASURE.trips} DESC, ${expr} ROWS UNBOUNDED PRECEDING) AS cumulative_trips`;
   const select = `${expr} AS member,
-      COUNT(*) AS trips,
-      SUM(f.total_amount) AS revenue,
-      AVG(f.fare_amount) AS avg_fare,
-      AVG(f.trip_distance) AS avg_distance,
-      RANK() OVER (ORDER BY COUNT(*) DESC) AS trip_rank,
+      ${MEASURE.trips} AS trips,
+      ${MEASURE.revenue} AS revenue,
+      ${MEASURE.fare} AS avg_fare,
+      ${MEASURE.distance} AS avg_distance,
+      RANK() OVER (ORDER BY ${MEASURE.trips} DESC) AS trip_rank,
       ${windows}`;
-  return {
-    sql: `SELECT ${hint(timeoutMs)} ${select}
-    ${fromClause(select, where)}
-    WHERE ${where}
-    GROUP BY ${expr}
-    ORDER BY ${isTime ? expr : 'trips DESC'}`,
-    values: [...path, ...slicer.values],
-  };
+  return statement({ select, groupBy: expr, orderBy: isTime ? expr : 'trips DESC' }, effective, timeoutMs, { conditions, values });
 }
 
 // roll-up: GROUP BY ... WITH ROLLUP yields detail rows, every subtotal and the grand total in one pass.
 function rollupQuery({ dimension, depth }, filters, timeoutMs) {
   const levels = HIERARCHIES[dimension].levels.slice(0, depth);
-  const slicer = slicerConditions(filters);
   const keys = levels.map((level, i) => `${EXPR[level.id]} AS k${i}, GROUPING(${EXPR[level.id]}) AS g${i}`).join(',\n      ');
   const groupBy = levels.map((level) => EXPR[level.id]).join(', ');
-  const where = slicer.conditions.join('\n      AND ');
   const select = `${keys},
-      COUNT(*) AS trips,
-      SUM(f.total_amount) AS revenue,
-      AVG(f.fare_amount) AS avg_fare`;
-  return {
-    sql: `SELECT ${hint(timeoutMs)} ${select}
-    ${fromClause(select, where)}
-    WHERE ${where}
-    GROUP BY ${groupBy} WITH ROLLUP`,
-    values: slicer.values,
-  };
+      ${MEASURE.trips} AS trips,
+      ${MEASURE.revenue} AS revenue,
+      ${MEASURE.fare} AS avg_fare`;
+  return statement({ select, groupBy: `${groupBy} WITH ROLLUP` }, filters, timeoutMs);
 }
 
 export function pivotColumns(column, filters) {
@@ -109,25 +148,19 @@ function pivotQuery({ rows, columns, measure }, filters, timeoutMs) {
   const rowExpr = EXPR[rows];
   const colExpr = EXPR[columns];
   const members = pivotColumns(columns, filters);
-  const aggregate = {
-    trips: (condition) => (condition ? `COUNT(CASE WHEN ${condition} THEN 1 END)` : 'COUNT(*)'),
-    revenue: (condition) => `SUM(${condition ? `CASE WHEN ${condition} THEN f.total_amount END` : 'f.total_amount'})`,
-    averageFare: (condition) => `AVG(${condition ? `CASE WHEN ${condition} THEN f.fare_amount END` : 'f.fare_amount'})`,
+  const [total, conditional] = {
+    trips: [MEASURE.trips, MEASURE.tripsIf],
+    revenue: [MEASURE.revenue, MEASURE.revenueIf],
+    averageFare: [MEASURE.fare, MEASURE.fareIf],
   }[measure];
-  const slicer = slicerConditions(filters);
-  const where = slicer.conditions.join('\n      AND ');
-  const cells = members.map((_, i) => `${aggregate(`${colExpr} = ?`)} AS c${i}`).join(',\n      ');
+  const cells = members.map((_, i) => `${conditional(`${colExpr} = ?`)} AS c${i}`).join(',\n      ');
   const select = `${rowExpr} AS row_key, GROUPING(${rowExpr}) AS row_g,
       ${cells},
-      ${aggregate('')} AS row_total`;
-  return {
-    sql: `SELECT ${hint(timeoutMs)} ${select}
-    ${fromClause(select, where, colExpr)}
-    WHERE ${where}
-    GROUP BY ${rowExpr} WITH ROLLUP`,
-    values: [...members, ...slicer.values],
-    members,
-  };
+      ${total} AS row_total`;
+  const query = statement({ select, groupBy: `${rowExpr} WITH ROLLUP` }, filters, timeoutMs);
+  // Member placeholders sit in the SELECT list, ahead of the derived table in bind order; average cells use each one twice.
+  const bound = members.flatMap((member) => (measure === 'averageFare' ? [member, member] : [member]));
+  return { ...query, values: [...bound, ...query.values], members };
 }
 
 export function buildOlapQuery(operation, request, timeoutMs = 180_000) {

@@ -30,15 +30,27 @@
   let levels = $derived(HIERARCHIES[dimension].levels);
   let maxDepth = $derived(levels.length);
 
-  async function load() {
+  // Results are keyed by everything that shapes them, so rolling up or revisiting a tab needs no request.
+  const CACHE_MS = 5 * 60_000;
+  const cache = new Map();
+
+  async function load(force = false) {
     controller?.abort();
     const current = new AbortController();
     controller = current;
-    loading = true; error = ''; result = null;
+    error = '';
     const options = view === 'hierarchy' ? { dimension, path } : view === 'rollup' ? { dimension, depth } : { ...pivot };
+    const key = JSON.stringify([view, $state.snapshot(filters), options]);
+    const hit = cache.get(key);
+    if (force !== true && hit && Date.now() - hit.at < CACHE_MS) { result = hit.data; loading = false; return; }
+    loading = true; result = null;
     try {
       const data = await getOlap(view, filters, options, { signal: current.signal });
-      if (!current.signal.aborted) result = data;
+      if (!current.signal.aborted) {
+        result = data;
+        if (cache.size >= 40) cache.delete(cache.keys().next().value);
+        cache.set(key, { at: Date.now(), data });
+      }
     } catch (problem) {
       if (!current.signal.aborted && problem.name !== 'AbortError') error = problem.message || 'Unable to load this query.';
     } finally { if (!current.signal.aborted) loading = false; }
@@ -107,7 +119,7 @@
   {#if loading}
     <div class="loading-indicator" role="status">Querying the warehouse… Large selections may take a few minutes.</div>
   {:else if error}
-    <div class="error-state" role="alert"><Icon name="info" size={30} /><h2>We couldn't load this query.</h2><p>{error}</p><button class="button button-primary" onclick={load}>Try again</button></div>
+    <div class="error-state" role="alert"><Icon name="info" size={30} /><h2>We couldn't load this query.</h2><p>{error}</p><button class="button button-primary" onclick={() => load(true)}>Try again</button></div>
   {:else if result?.operation === 'hierarchy'}
     <nav class="olap-trail" aria-label="Drill path">
       <button class="trail-step" class:current={path.length === 0} onclick={() => rollUp(0)}>All {HIERARCHIES[dimension].label.toLowerCase()}</button>
@@ -155,7 +167,7 @@
   {/if}
 
   {#if result}
-    <p class="report-provenance">Retrieved {new Date(result.meta.generatedAt).toLocaleString()} · Pickup dates in {result.meta.year} · {decimal(result.meta.queryMs / 1000)} s query time</p>
+    <p class="report-provenance">Retrieved {new Date(result.meta.generatedAt).toLocaleString()} · Pickup dates in {result.meta.year} · {decimal(result.meta.queryMs / 1000)} s query time{result.meta.cached ? ' · cached' : ''}</p>
     <details class="sql-view"><summary>Show SQL</summary><pre>{result.meta.sql}</pre></details>
   {/if}
 </section>
