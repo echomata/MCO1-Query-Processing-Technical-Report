@@ -20,10 +20,8 @@
     {/each}
   </nav>
   <div class="sidebar-note">
-    <span class="small-kicker">A YEAR IN MOTION</span>
-    <div class="sidebar-year">2025<span>NYC</span></div>
-    <p>One city. Millions of journeys.<br />A clearer view of how it moves.</p>
-    <div class="taxi-stripe"></div>
+    <span class="small-kicker">YEAR</span>
+    <div class="sidebar-year">2025</div>
   </div>
   <div class="sidebar-bottom">
     <div class="data-status"><span class="status-dot"></span><span>{sourceLabel === 'LIVE DATABASE' ? 'Live warehouse connected' : sourceLabel === 'CONNECTING' ? 'Connecting to warehouse…' : sourceLabel === 'WIP' ? 'Work in progress' : 'Warehouse unavailable'}</span></div>

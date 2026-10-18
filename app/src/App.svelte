@@ -79,7 +79,7 @@
   </header>
   <main id="main" tabindex="-1">
     <section class="page-intro">
-      <div><p class="eyebrow">NYC YELLOW TAXI / ANNUAL EXPLORER</p><h1>{activeReport.title}</h1><p class="intro-description">{activeReport.description}</p></div>
+      <div><h1>{activeReport.title}</h1>{#if activeReport.description}<p class="intro-description">{activeReport.description}</p>{/if}</div>
       <button class="button button-outline export-button" disabled={loading || report?.meta.source !== 'warehouse' || !!error} onclick={exportReport}><Icon name="download" size={17} />Export report</button>
     </section>
     {#if !activeReport.wip}

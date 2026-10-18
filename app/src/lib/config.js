@@ -1,5 +1,5 @@
 export const REPORTS = [
-  { id: 'overview', label: 'Overview', icon: 'overview', title: 'The city, by the numbers.', description: 'Explore the rhythm of New York, one taxi trip at a time.' },
+  { id: 'overview', label: 'Overview', icon: 'overview', title: 'Overview', description: '' },
   { id: 'time', label: 'Trip trends', icon: 'chart', title: 'Every trip tells a story.', description: 'Explore trip activity and revenue across the calendar.' },
   { id: 'locations', label: 'Location analysis', icon: 'pin', title: 'Where the city moves.', description: 'Compare pickup activity across boroughs and taxi zones.' },
   { id: 'payments', label: 'Payment analysis', icon: 'wallet', title: 'Follow the fare.', description: 'Compare payment methods across your selected trips.' },
