@@ -25,13 +25,6 @@ test('unavailable API and sample responses never fall back to mock data', async 
   await assert.rejects(getReport('overview', {}, { fetchImpl: async () => Response.json({ report: 'overview', meta: { source: 'warehouse', status: 'ready' } }) }), /incomplete/);
 });
 
-test('WIP has no figures and makes no request', async () => {
-  const result = await getReport('optimization', {}, { fetchImpl: () => assert.fail('WIP should not fetch') });
-  assert.equal(result.meta.status, 'wip');
-  assert.equal(result.meta.source, null);
-  assert.equal(result.summary, undefined);
-});
-
 test('invalid filters are rejected before the request', async () => {
   assert.throws(() => validateFilters({ startMonth: 8, endMonth: 2 }), /starting month/);
   assert.throws(() => validateFilters({ borough: "Queens' OR 1=1" }), /borough/);

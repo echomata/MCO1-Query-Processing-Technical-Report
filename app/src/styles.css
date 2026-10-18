@@ -1586,9 +1586,6 @@ tbody tr:hover {
   border-color: #d5e4d0;
 }
 .source-pill.live > span { background: #54825d; }
-.wip-tag { font-size: 10px; font-weight: 600; white-space: nowrap; }
-.wip-panel { background: white; border: 1px solid var(--line); border-radius: 8px; }
-.wip-panel h2 { margin: 14px 0; color: var(--ink); font-size: 19px; }
 .report-provenance { color: var(--muted); font-size: 10px; margin-bottom: 14px; }
 /* =========================================================
    OLAP explorer
@@ -1612,6 +1609,7 @@ tbody tr:hover {
 .olap-controls label { min-width: 170px; }
 .olap-trail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 22px 14px; font-size: 12px; }
 .olap-trail .button { margin-left: auto; padding: 6px 12px; }
+.olap-panel > .loading-indicator { margin: 0; padding: 0 22px 20px; }
 .trail-step { border: 0; background: transparent; color: var(--green); padding: 4px 6px; border-radius: 4px; cursor: pointer; font: inherit; }
 .trail-step:hover { background: #f0f4e7; }
 .trail-step.current { color: var(--ink); font-weight: 600; }

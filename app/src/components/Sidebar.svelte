@@ -14,7 +14,7 @@
   <nav class="report-nav" aria-label="Analytical reports">
     {#each REPORTS as report}
       <button class:active={selected === report.id} aria-current={selected === report.id ? 'page' : undefined} onclick={() => onselect(report.id)}>
-        <Icon name={report.icon} /><span>{report.label}{#if report.wip} <small class="wip-tag">(WIP)</small>{/if}</span>
+        <Icon name={report.icon} /><span>{report.label}</span>
         {#if selected === report.id}<span class="nav-indicator"></span>{/if}
       </button>
     {/each}
@@ -24,7 +24,7 @@
     <div class="sidebar-year">2025</div>
   </div>
   <div class="sidebar-bottom">
-    <div class="data-status"><span class="status-dot"></span><span>{sourceLabel === 'LIVE DATABASE' ? 'Live warehouse connected' : sourceLabel === 'CONNECTING' ? 'Connecting to warehouse…' : sourceLabel === 'WIP' ? 'Work in progress' : 'Warehouse unavailable'}</span></div>
+    <div class="data-status"><span class="status-dot"></span><span>{sourceLabel === 'LIVE DATABASE' ? 'Live warehouse connected' : sourceLabel === 'CONNECTING' ? 'Connecting to warehouse…' : 'Warehouse unavailable'}</span></div>
     <div class="project-label">STADVDB <span>MCO1 / GROUP PROJECT</span></div>
   </div>
 </aside>

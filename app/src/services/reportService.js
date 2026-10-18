@@ -9,7 +9,6 @@ export async function getReport(report, input, { signal, fetchImpl = globalThis.
   if (!definition) throw new Error('That report is not available.');
   const filters = validateFilters(input);
   signal?.throwIfAborted();
-  if (definition.wip) return { report, filters, meta: { status: 'wip', source: null } };
   const timeout = AbortSignal.timeout(240_000);
   let response;
   try {

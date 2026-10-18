@@ -4,7 +4,6 @@ export const REPORTS = [
   { id: 'locations', label: 'Location analysis', icon: 'pin', title: 'Location Analysis', description: 'Compare pickup activity across boroughs and taxi zones.' },
   { id: 'payments', label: 'Payment analysis', icon: 'wallet', title: 'Payment Analysis', description: 'Compare payment methods across your selected trips.' },
   { id: 'olap', label: 'OLAP explorer', icon: 'overview', title: 'OLAP Explorer', description: 'Drill down, roll up, slice, dice and pivot the trip warehouse.', custom: true },
-  { id: 'optimization', label: 'Optimization', icon: 'chart', title: 'Query performance.', description: 'Compare baseline and optimized query execution.', wip: true },
 ];
 
 export const DEFAULT_FILTERS = {

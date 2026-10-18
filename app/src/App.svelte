@@ -25,7 +25,7 @@
   let isTime = $derived(selected === 'overview' || selected === 'time');
   let chartTitle = $derived(selected === 'locations' ? `${measure === 'trips' ? 'Trips' : 'Revenue'} by pickup zone` : selected === 'payments' ? 'Payment breakdown' : measure === 'trips' ? 'Trip activity' : 'Revenue activity');
   let rowLabel = $derived(selected === 'locations' ? 'Pickup zone' : selected === 'payments' ? 'Payment method' : 'Period');
-  let sourceLabel = $derived(activeReport.wip ? 'WIP' : activeReport.custom ? 'LIVE DATABASE' : loading ? 'CONNECTING' : error ? 'UNAVAILABLE' : report?.meta.source === 'warehouse' ? 'LIVE DATABASE' : 'WIP');
+  let sourceLabel = $derived(activeReport.custom ? 'LIVE DATABASE' : loading ? 'CONNECTING' : error ? 'UNAVAILABLE' : report?.meta.source === 'warehouse' ? 'LIVE DATABASE' : 'UNAVAILABLE');
 
   async function loadReport() {
     requestController?.abort();
@@ -86,15 +86,11 @@
     {#if activeReport.custom}
       <OlapExplorer />
     {:else}
-    {#if !activeReport.wip}
-    <div class="source-notice"><Icon name="info" size={17} /><p><strong>Live warehouse reports.</strong> Figures use the selected pickup dates and stored total charges. Baseline queries may take a few minutes. Optimization comparison <span class="wip-tag">(WIP)</span>.</p></div>
+    <div class="source-notice"><Icon name="info" size={17} /><p><strong>Live warehouse reports.</strong> Figures use the selected pickup dates and stored total charges. Baseline queries may take a few minutes.</p></div>
     <FilterPanel {filters} onapply={applyFilters} onreset={resetFilters} busy={loading} error={filterError} />
     <div class="selection-line"><span><span class="selection-dot"></span>{rangeLabel}<span class="divider">/</span>{filters.borough === 'all' ? 'All boroughs' : filters.borough}<span class="divider">/</span>{filters.paymentType === 'all' ? 'All payment methods' : PAYMENTS.find((p) => p.id === filters.paymentType)?.label}</span><span class="selection-count">{isTime ? `${filters.granularity.charAt(0).toUpperCase() + filters.granularity.slice(1)} level` : activeReport.label}</span></div>
-    {/if}
     <section class="report-content" aria-busy={loading} aria-label="Report results">
-      {#if activeReport.wip}
-        <div class="empty-state wip-panel"><span class="wip-tag">(WIP)</span><h2>Optimization comparison is in progress.</h2><p>Baseline and optimized timings will appear when the team publishes its measurements.</p></div>
-      {:else if loading}
+      {#if loading}
         <div class="loading-indicator" role="status">Querying the warehouse… Large selections may take a few minutes.</div><div class="metrics-grid skeleton-grid" aria-hidden="true">{#each [1, 2, 3, 4] as card}<div class="skeleton skeleton-card"></div>{/each}</div><div class="skeleton skeleton-chart" aria-hidden="true"></div>
       {:else if error}
         <div class="error-state" role="alert"><Icon name="info" size={30} /><h2>We couldn't load this report.</h2><p>{error}</p><button class="button button-primary" onclick={loadReport}>Try again</button></div>
