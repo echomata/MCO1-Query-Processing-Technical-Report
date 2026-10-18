@@ -5,9 +5,7 @@ export { validateFilters } from '../lib/reportFilters.js';
 
 export function reuseReport(current, nextReport, input) {
   if (current?.meta?.source !== 'warehouse' || current.meta.status !== 'ready') return null;
-  const sameQuery = current.report === nextReport
-    || (['overview', 'time'].includes(current.report) && ['overview', 'time'].includes(nextReport));
-  if (!sameQuery || !REPORTS.some((item) => item.id === nextReport && !item.custom)) return null;
+  if (current.report !== nextReport || !REPORTS.some((item) => item.id === nextReport && !item.custom)) return null;
   const filters = validateFilters(input);
   if (!Object.keys(DEFAULT_FILTERS).every((key) => current.filters?.[key] === filters[key])) return null;
   return { ...current, report: nextReport };

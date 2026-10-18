@@ -22,7 +22,7 @@
   let requestController;
   let activeReport = $derived(REPORTS.find((item) => item.id === selected));
   let rangeLabel = $derived(`${MONTHS[filters.startMonth - 1].slice(0, 3)} – ${MONTHS[filters.endMonth - 1].slice(0, 3)} ${filters.year}`);
-  let isTime = $derived(selected === 'overview' || selected === 'time');
+  let isTime = $derived(selected === 'overview');
   let chartTitle = $derived(selected === 'locations' ? `${measure === 'trips' ? 'Trips' : 'Revenue'} by pickup zone` : selected === 'payments' ? 'Payment breakdown' : measure === 'trips' ? 'Trip activity' : 'Revenue activity');
   let rowLabel = $derived(selected === 'locations' ? 'Pickup zone' : selected === 'payments' ? 'Payment method' : 'Period');
   let sourceLabel = $derived(activeReport.custom ? 'LIVE DATABASE' : loading ? 'CONNECTING' : error ? 'UNAVAILABLE' : report?.meta.source === 'warehouse' ? 'LIVE DATABASE' : 'UNAVAILABLE');

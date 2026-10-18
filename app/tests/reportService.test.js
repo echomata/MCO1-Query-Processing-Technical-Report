@@ -30,25 +30,26 @@ test('invalid filters are rejected before the request', async () => {
   assert.throws(() => validateFilters({ borough: "Queens' OR 1=1" }), /borough/);
   assert.throws(() => validateFilters({ granularity: 'day' }), /time level/);
   await assert.rejects(getReport('invalid'), /not available/);
+  await assert.rejects(getReport('time'), /not available/);
 });
 
-test('navigation reuses only ready compatible reports with identical filters and retrieval metadata', () => {
+test('navigation reuses only the same ready report with identical filters and retrieval metadata', () => {
   const overview = formatReport('overview', DEFAULT_FILTERS, [], 123);
-  const trends = reuseReport(overview, 'time', { ...DEFAULT_FILTERS });
-  assert.equal(trends.report, 'time');
+  const reused = reuseReport(overview, 'overview', { ...DEFAULT_FILTERS });
+  assert.equal(reused.report, 'overview');
   assert.equal(overview.report, 'overview', 'navigation must not mutate the original report');
-  assert.deepEqual(trends.meta, overview.meta);
-  assert.deepEqual(trends.summary, overview.summary);
-  assert.equal(reuseReport(trends, 'overview', DEFAULT_FILTERS).report, 'overview');
+  assert.deepEqual(reused.meta, overview.meta);
+  assert.deepEqual(reused.summary, overview.summary);
+  assert.equal(reuseReport(overview, 'time', DEFAULT_FILTERS), null);
   assert.equal(reuseReport(overview, 'locations', DEFAULT_FILTERS), null);
   assert.equal(reuseReport(overview, 'payments', DEFAULT_FILTERS), null);
   assert.equal(reuseReport(overview, 'olap', DEFAULT_FILTERS), null);
-  assert.equal(reuseReport(overview, 'time', { ...DEFAULT_FILTERS, paymentType: 'cash' }), null);
-  assert.equal(reuseReport(overview, 'time', { ...DEFAULT_FILTERS, endMonth: 2 }), null);
-  assert.equal(reuseReport(overview, 'time', { ...DEFAULT_FILTERS, granularity: 'quarter' }), null);
-  assert.equal(reuseReport({ ...overview, meta: { source: 'mock', status: 'ready' } }, 'time', DEFAULT_FILTERS), null);
-  assert.equal(reuseReport({ ...overview, meta: { source: 'warehouse', status: 'loading' } }, 'time', DEFAULT_FILTERS), null);
-  assert.equal(reuseReport(null, 'time', DEFAULT_FILTERS), null);
+  assert.equal(reuseReport(overview, 'overview', { ...DEFAULT_FILTERS, paymentType: 'cash' }), null);
+  assert.equal(reuseReport(overview, 'overview', { ...DEFAULT_FILTERS, endMonth: 2 }), null);
+  assert.equal(reuseReport(overview, 'overview', { ...DEFAULT_FILTERS, granularity: 'quarter' }), null);
+  assert.equal(reuseReport({ ...overview, meta: { source: 'mock', status: 'ready' } }, 'overview', DEFAULT_FILTERS), null);
+  assert.equal(reuseReport({ ...overview, meta: { source: 'warehouse', status: 'loading' } }, 'overview', DEFAULT_FILTERS), null);
+  assert.equal(reuseReport(null, 'overview', DEFAULT_FILTERS), null);
 });
 
 test('cancelled requests preserve AbortError', async () => {

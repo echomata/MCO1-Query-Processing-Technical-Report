@@ -141,8 +141,11 @@ Without this index, teammates automatically retain the previous dashboard querie
 the existing pickup-time index for a single all-borough month, optimizer choice for
 wider ranges. No index is created automatically when the server starts.
 
-Each API request executes live SQL without a server result cache. Navigating between
-Overview and Trip Trends reuses the already displayed selection when all applied
+Overview includes the time trends, monthly/quarterly/yearly controls, summary cards,
+detail table, CSV export and borough snapshot. Trip Trends has been merged into
+Overview, leaving three regular report tabs: Overview, Location Analysis and
+Payment Analysis. Each API request executes live SQL without a server result cache.
+Reselecting the current report reuses its displayed selection when all applied
 filters match, keeping its original retrieval time and query time. Apply, Reset and
 Retry request fresh warehouse data.
 
@@ -157,7 +160,7 @@ also cover refunds, unknown codes, boundaries, empty selections and wider date r
 See [dashboard optimization notes](docs/dashboard-optimization.md) for measured scope.
 See [covering-index notes](docs/dashboard-covering-index.md) for the second optimization.
 
-The existing four report views are live, and the OLAP Explorer now provides hierarchy
+The three regular report views are live, and the OLAP Explorer now provides hierarchy
 drill-down/roll-up, filter-based slice/dice, and pivot operations against the warehouse.
 The current location hierarchy is borough -> service zone -> taxi zone; the exact
 cross-dimension borough -> taxi zone -> day flow still requires verification.

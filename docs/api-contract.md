@@ -6,7 +6,10 @@ on the same local origin. All API responses have `Cache-Control: no-store`.
 
 ## Reports and filters
 
-Live report IDs: `overview`, `time`, `locations`, `payments`.
+Navigation report IDs: `overview`, `locations`, `payments`, plus the OLAP Explorer.
+Overview includes time trends and the monthly/quarterly/yearly controls. The backend
+also accepts `time` as a legacy report ID with the same SQL as `overview`; it is no
+longer a separate frontend tab.
 `optimization` is absent from navigation. Its retired API ID retains HTTP 501 /
 `REPORT_WIP` for compatibility; performance comparisons belong in the report.
 Unknown report IDs return 404. There is no mock mode or fallback.
@@ -106,8 +109,8 @@ Errors use `{error:{code,message}}`:
 | 503 | DATABASE_UNAVAILABLE | Connection, credentials, schema or database request failure |
 | 504 | QUERY_TIMEOUT | SELECT exceeded its configured server execution budget |
 
-Overview and Trip Trends have identical SQL for identical filters. Navigation can
-reuse the displayed result while preserving its `generatedAt` and `queryMs`;
+Reselecting the current report with identical applied filters can reuse the
+displayed result while preserving its `generatedAt` and `queryMs`;
 Apply/Reset/Retry always send a fresh API request.
 The browser hides previous results while loading or on failure. Export is enabled
 only for valid warehouse responses. Cancelling a request closes its MySQL connection;
