@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import math
 import os
 import sys
@@ -7,8 +8,80 @@ import time
 import pyarrow.parquet as pq
 import pymysql
 
-from etl_load import (BASE, COLUMN_ALIASES, EXIT_DATA, EXIT_OK, LoadError,
-                      acquire_lock, file_identity, release_lock, resolve_columns)
+# Shared helpers inlined so this script stays standalone: the main ETL's
+# hyphenated deliverable name cannot be imported as a Python module.
+
+BASE = r"C:\Users\Justin Miguel\Documents\NYC_Taxi_DW\NYC_Yellow_Taxi_2025"
+
+COLUMN_ALIASES = {
+    "VendorID": ["VendorID"],
+    "tpep_pickup_datetime": ["tpep_pickup_datetime"],
+    "tpep_dropoff_datetime": ["tpep_dropoff_datetime"],
+    "passenger_count": ["passenger_count"],
+    "trip_distance": ["trip_distance"],
+    "RatecodeID": ["RatecodeID"],
+    "store_and_fwd_flag": ["store_and_fwd_flag"],
+    "PULocationID": ["PULocationID"],
+    "DOLocationID": ["DOLocationID"],
+    "payment_type": ["payment_type"],
+    "fare_amount": ["fare_amount"],
+    "extra": ["extra"],
+    "mta_tax": ["mta_tax"],
+    "tip_amount": ["tip_amount"],
+    "tolls_amount": ["tolls_amount"],
+    "improvement_surcharge": ["improvement_surcharge"],
+    "total_amount": ["total_amount"],
+    "congestion_surcharge": ["congestion_surcharge"],
+    "Airport_fee": ["Airport_fee", "airport_fee"],
+    "cbd_congestion_fee": ["cbd_congestion_fee"],
+}
+
+EXIT_OK, EXIT_DATA, EXIT_USAGE = 0, 1, 2
+
+
+class LoadError(Exception):
+    pass
+
+
+def resolve_columns(schema_names):
+    resolved = {}
+    missing = []
+    for canon, aliases in COLUMN_ALIASES.items():
+        hit = next((a for a in aliases if a in schema_names), None)
+        if hit is None:
+            missing.append(canon)
+        else:
+            resolved[canon] = hit
+    if missing:
+        raise LoadError(f"parquet schema missing columns: {missing} "
+                        f"(got: {sorted(schema_names)})")
+    return resolved
+
+
+def file_identity(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(8 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest(), os.path.getsize(path)
+
+
+def acquire_lock(con, name, timeout=0):
+    cur = con.cursor()
+    try:
+        cur.execute("SELECT GET_LOCK(%s,%s)", (name, timeout))
+        return cur.fetchone()[0] == 1
+    finally:
+        cur.close()
+
+
+def release_lock(con, name):
+    cur = con.cursor()
+    try:
+        cur.execute("SELECT RELEASE_LOCK(%s)", (name,))
+    finally:
+        cur.close()
+
 
 SRC_COLS = list(COLUMN_ALIASES.keys())
 INT_COLS = {"VendorID", "passenger_count", "RatecodeID", "PULocationID",
@@ -183,7 +256,7 @@ def load_month(m, pwd, host="localhost", user="root",
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         description="Load NYC Yellow Taxi 2025 parquet files into the source "
-                    "database (raw replica used by etl_load.py extraction).")
+                    "database (raw replica used by the warehouse ETL for extraction).")
     ap.add_argument("--month", help="MM, e.g. 01")
     ap.add_argument("--all", action="store_true", help="load all 12 months")
     ap.add_argument("--db-password", default=os.environ.get("MYSQL_PWD"),
