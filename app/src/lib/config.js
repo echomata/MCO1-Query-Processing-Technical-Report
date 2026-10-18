@@ -1,10 +1,9 @@
 export const REPORTS = [
   { id: 'overview', label: 'Overview', icon: 'overview', title: 'Overview', description: '' },
   { id: 'time', label: 'Trip trends', icon: 'chart', title: 'Trip Trends', description: 'Explore trip activity and revenue across the calendar.' },
-  { id: 'time', label: 'Trip trends', icon: 'chart', title: 'Every trip tells a story.', description: 'Explore trip activity and revenue across the calendar.' },
   { id: 'locations', label: 'Location analysis', icon: 'pin', title: 'Where the city moves.', description: 'Compare pickup activity across boroughs and taxi zones.' },
   { id: 'payments', label: 'Payment analysis', icon: 'wallet', title: 'Follow the fare.', description: 'Compare payment methods across your selected trips.' },
-  { id: 'olap', label: 'OLAP explorer', icon: 'overview', title: 'Slice the cube.', description: 'Drill down, roll up, slice, dice and pivot the trip warehouse.', custom: true },
+  { id: 'olap', label: 'OLAP explorer', icon: 'overview', title: 'Explore the data', description: 'View the data from different perspectives.', custom: true },
   { id: 'optimization', label: 'Optimization', icon: 'chart', title: 'Query performance.', description: 'Compare baseline and optimized query execution.', wip: true },
 ];
 
