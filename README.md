@@ -8,7 +8,7 @@ the team supplies its actual measurements.
 ## Run locally
 
 Prerequisites: Node.js 22.12+ and a running, populated MySQL instance with the same
-`nyc_yellow_taxi_2025` schema as `data/data_warehouse_schema.sql`.
+`nyc_yellow_taxi_2025` schema as `data/STADVDB-MCO1-Group3-Schema.sql`.
 The repository does not contain the 48-million-row dataset; each teammate needs their
 own imported data or access to the team's warehouse.
 
