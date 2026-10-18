@@ -1590,3 +1590,46 @@ tbody tr:hover {
 .wip-panel { background: white; border: 1px solid var(--line); border-radius: 8px; }
 .wip-panel h2 { margin: 14px 0; color: var(--ink); font-size: 19px; }
 .report-provenance { color: var(--muted); font-size: 10px; margin-bottom: 14px; }
+/* =========================================================
+   OLAP explorer
+   =========================================================
+*/
+.olap-filters { margin-bottom: 14px; }
+.olap-filter-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: end; }
+.olap-filter-grid fieldset { border: 1px solid #e2e6db; border-radius: 5px; margin: 0; padding: 8px 10px 10px; min-width: 0; grid-column: span 2; }
+.olap-filter-grid legend { font-size: 11px; color: #6e7868; font-weight: 500; padding: 0 4px; }
+.check-row { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.check { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; }
+.olap-filter-grid .filter-actions { grid-column: span 2; justify-self: end; }
+.olap-hint { margin: 12px 0 0; font-size: 11px; color: var(--muted); }
+.olap-badge { font-size: 9px; padding: 3px 8px; border-radius: 4px; background: #f4f5f0; border: 1px solid #edefe8; color: #7c8675; margin-left: auto; text-transform: uppercase; letter-spacing: .06em; }
+.olap-badge.slice { background: #fff6df; border-color: #f2dfa5; color: #8a6a1c; }
+.olap-badge.dice { background: #e8f0e9; border-color: #cfe0d2; color: #44624c; }
+.olap-tabs { display: flex; gap: 4px; margin: 4px 0 14px; border-bottom: 1px solid var(--line); }
+.olap-tabs button { border: 0; background: transparent; padding: 10px 16px; font: 500 12px 'DM Sans', sans-serif; color: var(--muted); border-bottom: 2px solid transparent; cursor: pointer; }
+.olap-tabs button.chosen { color: var(--ink); border-bottom-color: var(--green); }
+.olap-controls { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 22px 14px; }
+.olap-controls label { min-width: 170px; }
+.olap-trail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 22px 14px; font-size: 12px; }
+.olap-trail .button { margin-left: auto; padding: 6px 12px; }
+.trail-step { border: 0; background: transparent; color: var(--green); padding: 4px 6px; border-radius: 4px; cursor: pointer; font: inherit; }
+.trail-step:hover { background: #f0f4e7; }
+.trail-step.current { color: var(--ink); font-weight: 600; }
+.trail-level { color: var(--muted); font-size: 11px; margin-left: 10px; }
+.th-text { display: block; padding: 11px 22px; font-size: 11px; color: #6e7d60; }
+.drill-link { border: 0; background: transparent; font: inherit; color: var(--green); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 0; }
+.drill-link:hover { text-decoration: underline; }
+tfoot td { font-weight: 600; border-top: 1px solid #edf0e6; background: #fafbf7; }
+td.negative { color: #a14d3b; }
+.rollup-subtotal td { font-weight: 600; background: #f7f9f2; }
+.rollup-grand td { font-weight: 700; background: #eef3e6; }
+.pivot-table td { min-width: 96px; }
+.pivot-total { font-weight: 600; }
+.sql-view { margin: 4px 22px 18px; font-size: 12px; }
+.sql-view summary { cursor: pointer; color: var(--green); }
+.sql-view pre { overflow-x: auto; background: #f4f5f0; border: 1px solid var(--line); border-radius: 6px; padding: 12px; font-size: 11px; line-height: 1.5; }
+.olap-panel .report-provenance { padding: 0 22px; }
+@media (max-width: 800px) {
+  .olap-filter-grid { grid-template-columns: 1fr; }
+  .olap-filter-grid fieldset, .olap-filter-grid .filter-actions { grid-column: auto; }
+}

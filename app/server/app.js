@@ -3,6 +3,8 @@ import { existsSync } from 'node:fs';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { parseFilters } from '../src/lib/reportFilters.js';
 import { buildReportQuery, formatReport, LIVE_REPORTS } from './reports.js';
+import { parseOlapRequest } from '../src/lib/olap.js';
+import { buildOlapQuery, formatOlap, OLAP_OPERATIONS } from './olap.js';
 
 export function createApp({ database, distPath, logger = console, shareAuth }) {
   const app = express();
@@ -47,6 +49,23 @@ export function createApp({ database, distPath, logger = console, shareAuth }) {
       const started = performance.now();
       const rows = await database.query(query.sql, query.values, controller.signal);
       if (!controller.signal.aborted) res.json(formatReport(report, filters, rows, performance.now() - started));
+    } catch (error) { if (!controller.signal.aborted) unavailable(res, error); }
+    finally { res.off('close', onClose); }
+  });
+  app.get('/api/olap/:operation', async (req, res) => {
+    const operation = req.params.operation;
+    if (!OLAP_OPERATIONS.includes(operation)) return sendError(res, 404, 'REPORT_NOT_FOUND', 'That OLAP operation is not available.');
+    let request;
+    try { request = parseOlapRequest(operation, new URL(req.originalUrl, 'http://localhost').searchParams); }
+    catch (error) { return sendError(res, 400, 'INVALID_FILTERS', error.message); }
+    const controller = new AbortController();
+    const onClose = () => { if (!res.writableEnded) controller.abort(); };
+    res.on('close', onClose);
+    try {
+      const query = buildOlapQuery(operation, request, database.queryTimeoutMs);
+      const started = performance.now();
+      const rows = await database.query(query.sql, query.values, controller.signal);
+      if (!controller.signal.aborted) res.json(formatOlap(operation, request, query, rows, performance.now() - started));
     } catch (error) { if (!controller.signal.aborted) unavailable(res, error); }
     finally { res.off('close', onClose); }
   });

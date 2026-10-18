@@ -6,6 +6,7 @@
   import MetricCard from './components/MetricCard.svelte';
   import BarChart from './components/BarChart.svelte';
   import DataTable from './components/DataTable.svelte';
+  import OlapExplorer from './components/OlapExplorer.svelte';
   import { DEFAULT_FILTERS, MONTHS, PAYMENTS, REPORTS } from './lib/config.js';
   import { compact, currency, decimal } from './lib/format.js';
   import { getReport, validateFilters } from './services/reportService.js';
@@ -24,7 +25,7 @@
   let isTime = $derived(selected === 'overview' || selected === 'time');
   let chartTitle = $derived(selected === 'locations' ? `${measure === 'trips' ? 'Trips' : 'Revenue'} by pickup zone` : selected === 'payments' ? 'Payment breakdown' : measure === 'trips' ? 'Trip activity' : 'Revenue activity');
   let rowLabel = $derived(selected === 'locations' ? 'Pickup zone' : selected === 'payments' ? 'Payment method' : 'Period');
-  let sourceLabel = $derived(activeReport.wip ? 'WIP' : loading ? 'CONNECTING' : error ? 'UNAVAILABLE' : report?.meta.source === 'warehouse' ? 'LIVE DATABASE' : 'WIP');
+  let sourceLabel = $derived(activeReport.wip ? 'WIP' : activeReport.custom ? 'LIVE DATABASE' : loading ? 'CONNECTING' : error ? 'UNAVAILABLE' : report?.meta.source === 'warehouse' ? 'LIVE DATABASE' : 'WIP');
 
   async function loadReport() {
     requestController?.abort();
@@ -41,7 +42,7 @@
     } finally { if (!controller.signal.aborted) loading = false; }
   }
 
-  function selectReport(id) { selected = id; menuOpen = false; loadReport(); }
+  function selectReport(id) { selected = id; menuOpen = false; if (!REPORTS.find((item) => item.id === id)?.custom) loadReport(); }
   function applyFilters(next) {
     try { filters = validateFilters(next); filterError = ''; loadReport(); }
     catch (problem) { filterError = problem.message; }
@@ -80,8 +81,11 @@
   <main id="main" tabindex="-1">
     <section class="page-intro">
       <div><h1>{activeReport.title}</h1>{#if activeReport.description}<p class="intro-description">{activeReport.description}</p>{/if}</div>
-      <button class="button button-outline export-button" disabled={loading || report?.meta.source !== 'warehouse' || !!error} onclick={exportReport}><Icon name="download" size={17} />Export report</button>
+      {#if !activeReport.custom}<button class="button button-outline export-button" disabled={loading || report?.meta.source !== 'warehouse' || !!error} onclick={exportReport}><Icon name="download" size={17} />Export report</button>{/if}
     </section>
+    {#if activeReport.custom}
+      <OlapExplorer />
+    {:else}
     {#if !activeReport.wip}
     <div class="source-notice"><Icon name="info" size={17} /><p><strong>Live warehouse reports.</strong> Figures use the selected pickup dates and stored total charges. Baseline queries may take a few minutes. Optimization comparison <span class="wip-tag">(WIP)</span>.</p></div>
     <FilterPanel {filters} onapply={applyFilters} onreset={resetFilters} busy={loading} error={filterError} />
@@ -111,6 +115,7 @@
         <section class="panel results-panel"><div class="panel-heading"><div><div class="results-title"><h2>The details</h2><span class="row-count">{report.series.length} rows</span></div><p>Exact values behind the visualization.</p></div><span class="table-unit">Revenue & fares in USD</span></div><DataTable rows={report.series} label={rowLabel} /></section>
       {/if}
     </section>
+    {/if}
     <footer class="page-footer"><span><strong>meter</strong> / NYC Taxi Analytics</span><span>STADVDB MCO1 <span class="divider">·</span> Warehouse integration</span></footer>
   </main>
 </div>
