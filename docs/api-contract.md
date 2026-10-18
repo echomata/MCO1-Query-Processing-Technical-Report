@@ -24,6 +24,20 @@ SQL binds filter values and uses allow-listed grouping expressions. Month ranges
 `pickup_datetime >= start AND pickup_datetime < next_month`, with the stored local
 pickup datetime unchanged. Locations refer to pickup, not dropoff.
 
+## OLAP endpoints
+
+The OLAP Explorer uses `GET /api/olap/{operation}` with these operations:
+
+- `hierarchy`: drill down or roll up one level at a time through the time or pickup-location hierarchy.
+- `rollup`: return detail rows, subtotals, and a grand total using `WITH ROLLUP`.
+- `pivot`: compare a selected row dimension against a selected column dimension using conditional aggregation.
+
+Common OLAP filters are `startMonth`, `endMonth`, `boroughs`, `payments`, and `dayType`.
+Slice and dice are represented by restricting those filters: one restricted member is
+reported as a slice, while multiple restrictions are reported as a dice selection.
+The current location hierarchy is borough -> service zone -> taxi zone; the required
+cross-dimension borough -> taxi zone -> day flow remains pending verification.
+
 ## Response
 
 Shape only; `n` below denotes a numeric value, not a measured example:
@@ -86,7 +100,8 @@ no example data is substituted. Cancellation attempts `KILL QUERY` on that reque
 own MySQL connection, then closes it. If cancellation is unavailable, the SELECT
 execution budget still applies. The pool limits concurrent queries and queued requests.
 Full-year baseline requests exceeded 180 seconds on the current machine; use narrower
-selections until the team's equivalent optimized queries are integrated.
+selections until the team's equivalent optimized queries are integrated. OLAP requests
+use the same configured query budget and currently execute against the raw fact table.
 
 ## Optimization handoff
 
@@ -94,5 +109,5 @@ selections until the team's equivalent optimized queries are integrated.
 `group_key`, `group_label`, `borough`, `trips`, `revenue_cents`, `fare_cents`,
 `distance_total`, `duration_total`. Preserve semantics and aliases when changing SQL.
 Query timings here are request diagnostics, not controlled original-versus-optimized
-measurements. Daily drill-down, pivot, final business-query mapping and measured
-optimization comparisons remain separate pending work.
+measurements. The exact cross-dimension daily drill-down and measured optimization
+comparisons remain separate pending work.

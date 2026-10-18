@@ -127,9 +127,11 @@ No indexes, schema changes, ETL runs or data updates are performed by this API.
 Responses are not cached; benchmark work should record execution plans, repeat runs
 under controlled conditions, and check original/optimized results are equivalent.
 
-The existing four report views are live, but this does not complete all OLAP/spec
-requirements: daily/zone drill-down, pivot, and the team's final business queries
-still require their own implementation and verification. Optimization has a WIP page.
+The existing four report views are live, and the OLAP Explorer now provides hierarchy
+drill-down/roll-up, filter-based slice/dice, and pivot operations against the warehouse.
+The current location hierarchy is borough -> service zone -> taxi zone; the exact
+cross-dimension borough -> taxi zone -> day flow still requires verification.
+Optimization has a WIP page.
 
 ## Structure
 

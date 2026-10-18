@@ -1,22 +1,22 @@
-# Website development chunks
+# Website development status
 
-Current scope: Svelte + Vite website/dashboard and frontend functional testing, with supporting evidence for the report. The final backend and warehouse design belong to the team's other workstreams.
+Current scope: Svelte + Vite dashboard, Express API, live MySQL reports, OLAP
+exploration, and functional-test evidence for the report.
 
-## Completed initial foundation
+## Completed
 
-- [x] Chunk 0: inspect repository and document local run instructions.
-- [x] Chunk 1: create Svelte + Vite application and npm scripts.
-- [x] Chunk 2: responsive dashboard layout, navigation, filter panel, cards, charts, and tables.
-- [x] Chunk 3: deterministic mock records and a service that can later be replaced with API requests.
+- [x] Dashboard layout, navigation, filters, cards, charts, tables, sorting, and CSV export.
+- [x] Live API integration with no mock-data fallback.
+- [x] Overview, trip-trend, pickup-location, and payment reports.
+- [x] OLAP Explorer with hierarchy drill-down/roll-up, filter-based slice/dice, and pivot.
+- [x] API and service tests for filters, live-result contracts, authentication, and OLAP query construction.
+- [x] ETL and frontend functional-test cases recorded for the report.
 
-The foundation also includes provisional time, location, and payment views, functional filters, time roll-up, table sorting, and CSV export. These are sample-data demonstrations, not validated real OLAP report results.
+The legacy fixture in `app/src/mock/` is retained for historical reference but is not
+imported by the running application.
 
 ## Remaining
 
-- [ ] Chunk 4: confirm the first business report and its SQL-backed result format with the teammate.
-- [ ] Chunk 5: finalize hierarchy controls, contextual drill-down to zones/days, and slice/dice behavior against the final schema.
-- [ ] Chunk 6: finalize additional reports and implement pivot controls/cross-tab.
-- [ ] Chunk 7: review visual design with the user and polish accessibility, empty/error scenarios, and interactions.
-- [ ] Chunk 8: record frontend functional cases and extend checks to UI behavior.
-- [ ] Chunk 9: integrate the real API and compare displayed results with reference query outputs.
-- [ ] Chunk 10: final screenshots, setup instructions, submission packaging, report contributions, and presentation walkthrough.
+- [ ] Verify the exact required borough -> taxi zone -> day drill-down against the final specification.
+- [ ] Add and measure the optimized SQL versions, preserving the current API semantics.
+- [ ] Capture final OLAP evidence and complete the report and presentation materials.
