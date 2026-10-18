@@ -1,11 +1,24 @@
 import express from 'express';
 import { existsSync } from 'node:fs';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { parseFilters } from '../src/lib/reportFilters.js';
 import { buildReportQuery, formatReport, LIVE_REPORTS } from './reports.js';
 
-export function createApp({ database, distPath, logger = console }) {
+export function createApp({ database, distPath, logger = console, shareAuth }) {
   const app = express();
   app.disable('x-powered-by');
+  if (shareAuth) {
+    if (!shareAuth.username || !shareAuth.password) throw new Error('Sharing requires a username and password.');
+    const digest = (value) => createHash('sha256').update(value).digest();
+    const expected = digest(`${shareAuth.username}:${shareAuth.password}`);
+    app.use((req, res, next) => {
+      res.set('Cache-Control', 'no-store');
+      const match = /^Basic ([A-Za-z0-9+/]+={0,2})$/i.exec(req.get('authorization') || '');
+      if (match && timingSafeEqual(digest(Buffer.from(match[1], 'base64')), expected)) return next();
+      res.set('WWW-Authenticate', 'Basic realm="Meter team demo", charset="UTF-8"');
+      return res.status(401).send('Sign in with the sharing username and password provided by the host.');
+    });
+  }
   app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   const sendError = (res, status, code, message) => res.status(status).json({ error: { code, message } });
   const unavailable = (res, error) => {
@@ -15,8 +28,8 @@ export function createApp({ database, distPath, logger = console }) {
   };
   app.get('/api/health', async (req, res) => {
     try {
-      const [row] = await database.query('SELECT DATABASE() AS database_name, @@port AS database_port');
-      res.json({ status: 'ready', source: 'warehouse', database: row.database_name, port: Number(row.database_port) });
+      await database.query('SELECT 1 AS connected');
+      res.json({ status: 'ready', source: 'warehouse' });
     } catch (error) { unavailable(res, error); }
   });
   app.get('/api/reports/:report', async (req, res) => {

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.js",
+    "share": "node scripts/share.js",
     "dev:client": "vite --host 127.0.0.1",
     "dev:api": "node --watch server/index.js",
     "start": "node server/index.js",

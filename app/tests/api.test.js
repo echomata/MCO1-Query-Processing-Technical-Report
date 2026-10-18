@@ -56,7 +56,7 @@ test('HTTP contract: live JSON, validation, WIP, unavailable DB and timeouts', a
   const database = { queryTimeoutMs: 123000, query: async (sql, params) => {
     calls++;
     if (failure) throw failure;
-    if (sql.startsWith('SELECT DATABASE')) return [{ database_name: 'nyc_yellow_taxi_2025', database_port: 3307 }];
+    if (sql === 'SELECT 1 AS connected') return [{ connected: 1 }];
     assert.deepEqual(params, ['2025-01-01', '2025-02-01']);
     return rows;
   } };
@@ -65,7 +65,7 @@ test('HTTP contract: live JSON, validation, WIP, unavailable DB and timeouts', a
   t.after(() => { server.closeAllConnections(); server.close(); });
   const url = `http://127.0.0.1:${server.address().port}`;
   const health = await fetch(`${url}/api/health`);
-  assert.equal((await health.json()).port, 3307);
+  assert.deepEqual(await health.json(), { status: 'ready', source: 'warehouse' });
   for (const report of ['overview', 'time', 'locations', 'payments']) {
     const response = await fetch(`${url}/api/reports/${report}`);
     assert.equal(response.status, 200);
@@ -86,4 +86,30 @@ test('HTTP contract: live JSON, validation, WIP, unavailable DB and timeouts', a
   assert.ok(!(await unavailable.text()).includes('secret-password'));
   failure = Object.assign(new Error('timeout'), { errno: 3024 });
   assert.equal((await fetch(`${url}/api/reports/overview`)).status, 504);
+});
+
+test('sharing requires authentication for the website and every API route', async (t) => {
+  let calls = 0;
+  const database = { query: async () => { calls++; return [{ connected: 1 }]; } };
+  const shareAuth = { username: 'test-team', password: 'test-password' };
+  const server = createApp({ database, shareAuth }).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const url = `http://127.0.0.1:${server.address().port}`;
+  for (const path of ['/', '/assets/app.js', '/api/health', '/api/reports/overview', '/api/missing']) {
+    const response = await fetch(`${url}${path}`);
+    assert.equal(response.status, 401);
+    assert.match(response.headers.get('www-authenticate'), /^Basic /);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+  }
+  for (const authorization of ['Basic !!!', 'Bearer test', `Basic ${Buffer.from('test-team:wrong').toString('base64')}`]) {
+    assert.equal((await fetch(`${url}/api/health`, { headers: { authorization } })).status, 401);
+  }
+  assert.equal(calls, 0, 'unauthenticated requests must not reach MySQL');
+  const authorization = `Basic ${Buffer.from('test-team:test-password').toString('base64')}`;
+  const response = await fetch(`${url}/api/health`, { headers: { authorization } });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: 'ready', source: 'warehouse' });
+  assert.equal(calls, 1);
+  assert.throws(() => createApp({ database, shareAuth: { username: 'team' } }));
 });

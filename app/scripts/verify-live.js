@@ -13,7 +13,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 try {
   const health = await fetch(`${base}/api/health`).then((r) => r.json());
   assert.equal(health.status, 'ready');
-  console.log('Database:', health.database, 'port:', health.port);
+  console.log('Warehouse connection:', health.status);
   const filters = 'year=2025&startMonth=1&endMonth=1&borough=Staten+Island&paymentType=all&granularity=month';
   const [expected] = await database.query(`SELECT /*+ MAX_EXECUTION_TIME(180000) */ COUNT(*) AS trips,
     SUM(f.total_amount) AS revenue, AVG(f.fare_amount) AS fare,

@@ -35,9 +35,49 @@ Open the Local URL printed by Vite. Ctrl+C stops both processes.
 Vite forwards `/api` to the backend; no browser-to-MySQL connection or CORS setup
 is required. If you change `API_PORT`, restart both processes.
 
-Check `http://127.0.0.1:3001/api/health` for the actual connected schema and port.
+Check `http://127.0.0.1:3001/api/health` for warehouse connection readiness.
+The endpoint does not disclose the database name or port.
 The badge becomes **LIVE DATABASE** only after a valid warehouse report arrives.
 An unavailable database produces an error and retry button, with no example values.
+
+## Share using ngrok
+
+Install [ngrok](https://ngrok.com/download/windows) once and create an ngrok account.
+Authenticate locally using the token from your ngrok dashboard:
+
+```powershell
+ngrok config add-authtoken YOUR_TOKEN
+```
+
+If using the standalone executable, you may keep it at `app/.tools/ngrok.exe`
+instead of adding it to PATH. From `app`, authenticate that copy with
+`.\.tools\ngrok.exe config add-authtoken YOUR_TOKEN`. The tools folder is gitignored.
+Keep the token private; it belongs in ngrok's local configuration, not the repository.
+
+With MySQL running and `app/server/.env` configured, stop any existing app server
+with Ctrl+C, then run from `app`:
+
+```powershell
+npm.cmd run share
+```
+
+This builds the dashboard, starts the combined website/API server on
+`http://127.0.0.1:3001` (or your configured `API_PORT`), verifies the database
+connection, and opens an ngrok tunnel to that server. The entire shared site and API
+require a login. The terminal prints username `team` and a newly generated password
+for that session. Share the HTTPS **Forwarding** URL and login privately with your
+teammates. These credentials are separate from your MySQL password and change every
+time sharing starts. Teammates use your running warehouse through the dashboard;
+they do not need to start their own database to view it.
+
+Keep this terminal and your PC running. Ctrl+C stops the server and tunnel. Visitors
+may see ngrok's browser warning before reaching the login prompt. The local request
+inspection feature is disabled. Sharing does not speed up the baseline queries, so
+start with a small month range.
+
+This uses the built site rather than Vite's development server, so no Vite hostname
+allowlist or separate API tunnel is needed. After code or SQL changes, stop and rerun
+`npm.cmd run share` to rebuild. Use `npm.cmd run dev` for normal local development.
 
 ## Verification and production
 

@@ -9,8 +9,13 @@ if (existsSync(envPath)) process.loadEnvFile(envPath);
 try {
   const port = Number(process.env.API_PORT || 3001);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('API_PORT must be a valid port.');
+  let shareAuth;
+  if (process.env.METER_SHARE_MODE === '1') {
+    if (!process.env.METER_SHARE_USER || !process.env.METER_SHARE_PASSWORD) throw new Error('Sharing requires a username and password.');
+    shareAuth = { username: process.env.METER_SHARE_USER, password: process.env.METER_SHARE_PASSWORD };
+  }
   const database = createDatabase();
-  const app = createApp({ database, distPath: fileURLToPath(new URL('../dist', import.meta.url)) });
+  const app = createApp({ database, distPath: fileURLToPath(new URL('../dist', import.meta.url)), shareAuth });
   const server = app.listen(port, '127.0.0.1', () => console.log(`Meter API: http://127.0.0.1:${port} (MySQL ${process.env.DB_HOST || '127.0.0.1'}:${process.env.DB_PORT || 3307})`));
   server.on('error', (error) => { console.error(`API could not start: ${error.message}`); process.exit(1); });
   const shutdown = () => { server.close(); database.close().finally(() => process.exit(0)); };

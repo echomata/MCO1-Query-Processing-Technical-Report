@@ -149,6 +149,9 @@ vite.config.ts.timestamp-*
 .turbo
 
 # Local project datasets and Python runtime files
+app/.tools/
+ngrok.yml
+ngrok.yaml
 data/raw/
 data/processed/
 *.parquet

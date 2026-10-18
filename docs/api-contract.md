@@ -61,8 +61,14 @@ strings from MySQL are converted to JSON numbers, with monetary accumulation in 
 ## Health and failures
 
 `GET /api/health` executes a connection check and returns
-`{status:"ready", source:"warehouse", database, port}`. It verifies connectivity,
+`{status:"ready", source:"warehouse"}`. Database names, ports, and credentials are
+not returned. It verifies connectivity,
 not warehouse completeness. A report additionally requires the expected populated schema.
+
+`npm run share` enables HTTP Basic authentication for the entire built website and
+all API routes, including health checks. Unauthenticated requests return 401 before
+any database query. Sharing credentials are generated per session and printed only
+in the host's terminal. Normal local development does not require this sharing login.
 
 Errors use `{error:{code,message}}`:
 
