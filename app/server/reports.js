@@ -14,7 +14,7 @@ export function buildReportQuery(report, filters, timeoutMs = 180_000, { useCove
   const end = filters.endMonth === 12 ? `${filters.year + 1}-01-01` : `${filters.year}-${String(filters.endMonth + 1).padStart(2, '0')}-01`;
   const conditions = ['f.pickup_datetime >= ?', 'f.pickup_datetime < ?'];
   const values = [start, end];
-  if (filters.borough !== 'all') { conditions.push('l.borough = ?'); values.push(filters.borough); }
+  if (filters.borough !== 'all') { conditions.push('l_filter.borough = ?'); values.push(filters.borough); }
   if (filters.paymentType === 'card' || filters.paymentType === 'cash') {
     conditions.push('f.payment_sk = ?'); values.push(filters.paymentType === 'card' ? 1 : 2);
   } else if (filters.paymentType === 'other') conditions.push('f.payment_sk NOT IN (1, 2)');
@@ -56,20 +56,32 @@ export function buildReportQuery(report, filters, timeoutMs = 180_000, { useCove
       values, version,
     };
   }
-  // A selective borough (e.g. Staten Island) can use the existing location index
-  // to avoid reading every trip in the month. Preserve that access path.
+  const boroughFactKey = report === 'locations' ? 'f.pu_location_sk' : groupKey;
+  const boroughGroupLabel = report === 'locations' ? 'l_filter.zone' : groupKey;
+  const boroughIndex = useCoveringIndex ? ` FORCE INDEX (${DASHBOARD_COVER_INDEX})`
+    : filters.startMonth === filters.endMonth ? ' FORCE INDEX (idx_pickup_ts)' : '';
   return {
     sql: `SELECT ${hint}
-      ${groupKey} AS group_key, ${groupLabel} AS group_label, l.borough,
-      COUNT(*) AS trips,
-      SUM(f.total_amount) * 100 AS revenue_cents,
-      SUM(f.fare_amount) * 100 AS fare_cents,
-      SUM(f.trip_distance) AS distance_total,
-      SUM(f.duration_min) AS duration_total
-    FROM fact_trip f
-    JOIN dim_location l ON l.location_sk = f.pu_location_sk
-    WHERE ${conditions.join(' AND ')}
-    GROUP BY group_key, group_label, l.borough`,
+      a.group_key, a.group_label, a.borough,
+      SUM(a.trips) AS trips,
+      SUM(a.revenue_cents) AS revenue_cents,
+      SUM(a.fare_cents) AS fare_cents,
+      SUM(a.distance_total) AS distance_total,
+      SUM(a.duration_total) AS duration_total
+    FROM (
+      SELECT ${boroughFactKey} AS group_key, ${boroughGroupLabel} AS group_label,
+        l_filter.borough AS borough, f.pu_location_sk,
+        COUNT(*) AS trips,
+        SUM(f.total_amount) * 100 AS revenue_cents,
+        SUM(f.fare_amount) * 100 AS fare_cents,
+        SUM(f.trip_distance) AS distance_total,
+        SUM(f.duration_min) AS duration_total
+      FROM fact_trip f${boroughIndex}
+      JOIN dim_location l_filter ON l_filter.location_sk = f.pu_location_sk
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY group_key, group_label, l_filter.borough, f.pu_location_sk
+    ) a
+    GROUP BY a.group_key, a.group_label, a.borough`,
     values, version,
   };
 }
